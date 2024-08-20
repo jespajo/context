@@ -4,9 +4,11 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdlib.h> // for exit().
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-// Support `#if OS == LINUX`-style macros:
+// Support `#if OS == LINUX` style macros:
 #define LINUX    1
 #define WINDOWS  2
 #ifdef _WIN32
@@ -29,9 +31,6 @@ typedef  int64_t s64;
 s64 round_up_pow2(s64 num);
 bool is_power_of_two(s64 num);
 void log_error_(char *file, int line, char *format, ...);
-float frand();
-float lerp(float a, float b, float t);
-void Log(char *format, ...);
 
 #define log_error(...)  log_error_(__FILE__, __LINE__, __VA_ARGS__)
 
@@ -54,9 +53,7 @@ void Log(char *format, ...);
                           Breakpoint()))
 #endif
 
-#define Error(...)  (log_error(__VA_ARGS__), Breakpoint())
-
-#define Fatal(...)  (Error("Fatal error: " __VA_ARGS__), exit(1))
+#define Fatal(...)  (log_error("Fatal error: " __VA_ARGS__), Breakpoint(), exit(1))
 
 #define Min(A, B)  ((A) < (B) ? (A) : (B))
 #define Max(A, B)  ((A) > (B) ? (A) : (B))

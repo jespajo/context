@@ -17,9 +17,6 @@ ifdef OS
     lflags += ws2_32.lib # Link with winsock2.h for src/png.c.
     lflags += /Z7
     lflags += /Fe: $@
-
-    # Run targets:
-    all:  ;  bin/main$x
 else
     # Linux
     o := .o
@@ -45,6 +42,9 @@ endif
 # Build targets:
 all:  bin/main$x
 all:  tags
+
+# Run targets:
+all:  ;  bin/main$x
 
 cflags += -DDEBUG
 cflags += $(fsan)
