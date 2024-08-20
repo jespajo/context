@@ -1,4 +1,4 @@
-// alloc() and resize() do not currently assert that their Memory_Context arguments are not NULL.
+// alloc() and resize() do not currently assert that their Memory_context arguments are not NULL.
 // This should probably change, because it's too easy to accidentally create a new context:
 //
 //      u8_array array = {0};
@@ -20,7 +20,7 @@
 
 #include "context.h"
 
-void *double_if_needed(void *data, s64 *limit, s64 count, u64 unit_size, Memory_Context *context)
+void *double_if_needed(void *data, s64 *limit, s64 count, u64 unit_size, Memory_context *context)
 // Make sure there's room for at least one more item in the array. If reallocation occurs, modify
 // *limit and return a pointer to the new data. Otherwise return `data`.
 //
@@ -52,7 +52,7 @@ void *double_if_needed(void *data, s64 *limit, s64 count, u64 unit_size, Memory_
     return data;
 }
 
-static s64 get_free_block_index(Memory_Context *context, u64 size, u8 *data)
+static s64 get_free_block_index(Memory_context *context, u64 size, u8 *data)
 // Return the index of the block if it exists or the index where it would be inserted.
 {
     s64 i = 0;
@@ -60,7 +60,7 @@ static s64 get_free_block_index(Memory_Context *context, u64 size, u8 *data)
 
     while (i <= j) {
         s64 mid = (i + j)/2;
-        Memory_Block *block = &context->free_blocks[mid];
+        Memory_block *block = &context->free_blocks[mid];
 
         s64 cmp = size - block->size;
         if (!cmp) {
@@ -75,12 +75,12 @@ static s64 get_free_block_index(Memory_Context *context, u64 size, u8 *data)
     return i;
 }
 
-static Memory_Block *find_free_block(Memory_Context *context, u64 size, u8 *data)
+static Memory_block *find_free_block(Memory_context *context, u64 size, u8 *data)
 {
     s64 index = get_free_block_index(context, size, data);
 
     if (index < context->free_count) {
-        Memory_Block *block = &context->free_blocks[index];
+        Memory_block *block = &context->free_blocks[index];
 
         if (block->data == data && block->size == size)  return block;
     }
@@ -88,7 +88,7 @@ static Memory_Block *find_free_block(Memory_Context *context, u64 size, u8 *data
     return NULL;
 }
 
-static s64 get_used_block_index(Memory_Context *context, u8 *data)
+static s64 get_used_block_index(Memory_context *context, u8 *data)
 // Return the index of the block if it exists or the index where it would be inserted.
 {
     s64 i = 0;
@@ -96,7 +96,7 @@ static s64 get_used_block_index(Memory_Context *context, u8 *data)
 
     while (i <= j) {
         s64 mid = (i + j)/2;
-        Memory_Block *block = &context->used_blocks[mid];
+        Memory_block *block = &context->used_blocks[mid];
 
         s64 cmp = data - block->data;
         if (!cmp)  return mid;
@@ -108,12 +108,12 @@ static s64 get_used_block_index(Memory_Context *context, u8 *data)
     return i;
 }
 
-static Memory_Block *find_used_block(Memory_Context *context, u8 *data)
+static Memory_block *find_used_block(Memory_context *context, u8 *data)
 {
     s64 index = get_used_block_index(context, data);
 
     if (index < context->used_count) {
-        Memory_Block *block = &context->used_blocks[index];
+        Memory_block *block = &context->used_blocks[index];
 
         if (block->data == data)  return block;
     }
@@ -129,7 +129,7 @@ static bool in_range(void *zero, void *x, void *zero_plus_count)
 #ifndef DEBUG_MEMORY_CONTEXT
 #define assert_context_makes_sense(C)  ((void)0)
 #else
-static bool are_in_free_order(Memory_Block *blocks, s64 count)
+static bool are_in_free_order(Memory_block *blocks, s64 count)
 {
     for (s64 i = 0; i < count-1; i++) {
         if (blocks[i].size > blocks[i+1].size)   return false;
@@ -141,7 +141,7 @@ static bool are_in_free_order(Memory_Block *blocks, s64 count)
     return true;
 }
 
-static bool are_in_used_order(Memory_Block *blocks, s64 count)
+static bool are_in_used_order(Memory_block *blocks, s64 count)
 {
     for (s64 i = 0; i < count-1; i++) {
         if (blocks[i].data > blocks[i+1].data)  return false;
@@ -149,9 +149,9 @@ static bool are_in_used_order(Memory_Block *blocks, s64 count)
     return true;
 }
 
-static void assert_context_makes_sense(Memory_Context *context)
+static void assert_context_makes_sense(Memory_context *context)
 {
-    Memory_Context *c = context;
+    Memory_context *c = context;
 
     assert(are_in_free_order(c->free_blocks, c->free_count));
     assert(are_in_used_order(c->used_blocks, c->used_count));
@@ -161,12 +161,12 @@ static void assert_context_makes_sense(Memory_Context *context)
 
     // For each buffer, enumerate all blocks to make sure they look right.
     for (s64 buffer_index = 0; buffer_index < c->buffer_count; buffer_index++) {
-        Memory_Block *buffer = &c->buffers[buffer_index];
+        Memory_block *buffer = &c->buffers[buffer_index];
         u8 *buffer_end = buffer->data + buffer->size;
 
         u8 *data = buffer->data;
 
-        Memory_Block *last_used = find_used_block(c, data);
+        Memory_block *last_used = find_used_block(c, data);
         assert(last_used->data == buffer->data);
         assert(last_used->size == 1);
         assert(last_used->sentinel);
@@ -175,7 +175,7 @@ static void assert_context_makes_sense(Memory_Context *context)
         num_used += 1;
 
         while (data < buffer_end) {
-            Memory_Block *used_block = find_used_block(c, data);
+            Memory_block *used_block = find_used_block(c, data);
             if (used_block) {
                 data     += used_block->size;
                 num_used += 1;
@@ -192,7 +192,7 @@ static void assert_context_makes_sense(Memory_Context *context)
             assert(next_data < buffer_end);
 
             s64 free_size = next_data - data;
-            Memory_Block *free_block = find_free_block(c, free_size, data);
+            Memory_block *free_block = find_free_block(c, free_size, data);
             assert(free_block);
 
             data     += free_block->size;
@@ -208,9 +208,9 @@ static void assert_context_makes_sense(Memory_Context *context)
 }
 #endif // DEBUG_MEMORY_CONTEXT
 
-static Memory_Block *add_free_block(Memory_Context *context, void *data, u64 size)
+static Memory_block *add_free_block(Memory_context *context, void *data, u64 size)
 {
-    Memory_Context *c = context;
+    Memory_context *c = context;
 
     assert(data);
     assert(size);
@@ -222,15 +222,15 @@ static Memory_Block *add_free_block(Memory_Context *context, void *data, u64 siz
     // Make room by shifting everything after block_index right one.
     for (s64 i = c->free_count; i > insert_index; i--)  c->free_blocks[i] = c->free_blocks[i-1];
 
-    c->free_blocks[insert_index] = (Memory_Block){.data=data, .size=size};
+    c->free_blocks[insert_index] = (Memory_block){.data=data, .size=size};
     c->free_count += 1;
 
     return &c->free_blocks[insert_index];
 }
 
-static Memory_Block *add_used_block(Memory_Context *context, u8 *data, u64 size)
+static Memory_block *add_used_block(Memory_context *context, u8 *data, u64 size)
 {
-    Memory_Context *c = context;
+    Memory_context *c = context;
 
     assert(data && size);
 
@@ -241,13 +241,13 @@ static Memory_Block *add_used_block(Memory_Context *context, u8 *data, u64 size)
     // Make room by shifting everything after block_index right one.
     for (s64 i = c->used_count; i > insert_index; i--)  c->used_blocks[i] = c->used_blocks[i-1];
 
-    c->used_blocks[insert_index] = (Memory_Block){.data=data, .size=size};
+    c->used_blocks[insert_index] = (Memory_block){.data=data, .size=size};
     c->used_count += 1;
 
     return &c->used_blocks[insert_index];
 }
 
-static Memory_Block *grow_context(Memory_Context *context, u64 size)
+static Memory_block *grow_context(Memory_context *context, u64 size)
 // Add a new buffer of at least `size` bytes to a context. Return the associated free block. It
 // might seem like a good idea to make `size` a power of two. But in this case, the actual size of
 // the buffer created will be double `size`. The reason is that we have to reserve the first and
@@ -256,9 +256,9 @@ static Memory_Block *grow_context(Memory_Context *context, u64 size)
 {
     u64 FIRST_BUFFER_SIZE = 8192;
 
-    Memory_Context *c = context;
+    Memory_context *c = context;
 
-    Memory_Block buffer = {0};
+    Memory_block buffer = {0};
 
     // Our idea here is to double the size of each additional buffer that we add to a context.
     // We think this will help with fragmentation (particularly with child contexts) and reduce
@@ -283,14 +283,14 @@ static Memory_Block *grow_context(Memory_Context *context, u64 size)
     add_used_block(c, buffer.data,               1)->sentinel = true;
     add_used_block(c, buffer.data+buffer.size-1, 1)->sentinel = true;
 
-    Memory_Block *free_block = add_free_block(c, buffer.data+1, buffer.size-2);
+    Memory_block *free_block = add_free_block(c, buffer.data+1, buffer.size-2);
 
     assert_context_makes_sense(c);
 
     return free_block;
 }
 
-static void delete_block(Memory_Block *blocks, s64 *count, Memory_Block *block)
+static void delete_block(Memory_block *blocks, s64 *count, Memory_block *block)
 // Remove a block from an array of blocks. Decrement *count.
 {
     s64 index = block - blocks;
@@ -299,7 +299,7 @@ static void delete_block(Memory_Block *blocks, s64 *count, Memory_Block *block)
     // Move subsequent blocks left one, then delete the final block.
     for (s64 i = index+1; i < *count; i++)  blocks[i-1] = blocks[i];
 
-    blocks[*count-1] = (Memory_Block){0};
+    blocks[*count-1] = (Memory_block){0};
 
     *count -= 1;
 }
@@ -321,10 +321,10 @@ static u64 get_padding(u8 *data, u64 alignment)
     return padding;
 }
 
-static Memory_Block *alloc_block(Memory_Context *context, Memory_Block *free_block, u64 size, u64 alignment)
+static Memory_block *alloc_block(Memory_context *context, Memory_block *free_block, u64 size, u64 alignment)
 // Return a pointer to the newly used block on success. Return NULL if there's not room due to alignment.
 {
-    Memory_Context *c = context;
+    Memory_context *c = context;
 
     assert(in_range(c->free_blocks, free_block, c->free_blocks+c->free_count));
     assert(free_block->size >= size); // This is not necessary (we return NULL in this case) but otherwise why are you calling this function?
@@ -344,7 +344,7 @@ static Memory_Block *alloc_block(Memory_Context *context, Memory_Block *free_blo
 
     if (padding)  add_free_block(c, free_data, padding);
 
-    Memory_Block *used_block = add_used_block(c, free_data+padding, size);
+    Memory_block *used_block = add_used_block(c, free_data+padding, size);
 
     if (remaining) {
         u8 *next_free = used_block->data + used_block->size;
@@ -356,10 +356,10 @@ static Memory_Block *alloc_block(Memory_Context *context, Memory_Block *free_blo
     return used_block;
 }
 
-static Memory_Block *dealloc_block(Memory_Context *context, Memory_Block *used_block)
+static Memory_block *dealloc_block(Memory_context *context, Memory_block *used_block)
 // Return coalesced free block.
 {
-    Memory_Context *c = context;
+    Memory_context *c = context;
 
     assert(in_range(c->used_blocks, used_block, c->used_blocks+c->used_count));
     assert(!used_block->sentinel); // |Cleanup: If we're only going to do this during debug builds, we should probably not bother with the `sentinel` flag and we can make the whole check more expensive.
@@ -377,11 +377,11 @@ static Memory_Block *dealloc_block(Memory_Context *context, Memory_Block *used_b
 
     // See if we should coalesce with the left neighbour.
     {
-        Memory_Block *prev_used = used_block - 1;
+        Memory_block *prev_used = used_block - 1;
         u8 *prev_used_end = prev_used->data + prev_used->size;
         s64 distance = used_block->data - prev_used_end;
         if (distance) {
-            Memory_Block *left = find_free_block(c, distance, prev_used_end);
+            Memory_block *left = find_free_block(c, distance, prev_used_end);
             freed_data -= left->size;
             freed_size += left->size;
             delete_block(c->free_blocks, &c->free_count, left);
@@ -389,11 +389,11 @@ static Memory_Block *dealloc_block(Memory_Context *context, Memory_Block *used_b
     }
     // See if we should coalesce with the right neighbour.
     {
-        Memory_Block *next_used = used_block + 1;
+        Memory_block *next_used = used_block + 1;
         u8 *used_block_end = used_block->data + used_block->size;
         s64 distance = next_used->data - used_block_end;
         if (distance) {
-            Memory_Block *right = find_free_block(c, distance, used_block_end);
+            Memory_block *right = find_free_block(c, distance, used_block_end);
             freed_size += right->size;
             delete_block(c->free_blocks, &c->free_count, right);
         }
@@ -401,24 +401,24 @@ static Memory_Block *dealloc_block(Memory_Context *context, Memory_Block *used_b
 
     delete_block(c->used_blocks, &c->used_count, used_block);
 
-    Memory_Block *freed_block = add_free_block(c, freed_data, freed_size);
+    Memory_block *freed_block = add_free_block(c, freed_data, freed_size);
 
     assert_context_makes_sense(c);
 
     return freed_block;
 }
 
-static Memory_Block *resize_block(Memory_Context *context, Memory_Block *used_block, u64 new_size)
+static Memory_block *resize_block(Memory_context *context, Memory_block *used_block, u64 new_size)
 // Return the resized block if success, or NULL if there isn't room in a contiguous free block; in that case the caller will have to call alloc_block and dealloc_block.
 {
-    Memory_Context *c = context;
+    Memory_context *c = context;
 
     assert(in_range(c->used_blocks+1, used_block, c->used_blocks+c->used_count-1));
 
     // Don't bother shrinking. (Maybe one day.)
     if (new_size <= used_block->size)  return used_block;
 
-    Memory_Block *next_used = used_block + 1;
+    Memory_block *next_used = used_block + 1;
 
     u8 *end_of_used_block = used_block->data + used_block->size;
     u64 size_avail_after  = next_used->data - end_of_used_block;
@@ -430,7 +430,7 @@ static Memory_Block *resize_block(Memory_Context *context, Memory_Block *used_bl
     if (used_block->size + size_avail_after < new_size)  return NULL;
 
     // We can expand this block.
-    Memory_Block *free_neighbour = find_free_block(c, size_avail_after, end_of_used_block);
+    Memory_block *free_neighbour = find_free_block(c, size_avail_after, end_of_used_block);
     assert(free_neighbour);
 
     u64 extra_needed    = new_size - used_block->size;
@@ -448,9 +448,9 @@ static Memory_Block *resize_block(Memory_Context *context, Memory_Block *used_bl
     return used_block;
 }
 
-void *alloc(Memory_Context *context, s64 count, u64 unit_size)
+void *alloc(Memory_context *context, s64 count, u64 unit_size)
 {
-    Memory_Context *c = context;
+    Memory_context *c = context;
 
     assert(count);
     assert(unit_size);
@@ -467,20 +467,20 @@ void *alloc(Memory_Context *context, s64 count, u64 unit_size)
 
     // See if there's an already-free block of the right size.
     for (s64 i = get_free_block_index(c, size, NULL); i < c->free_count; i++) {
-        Memory_Block *free_block = &c->free_blocks[i];
-        Memory_Block *used_block = alloc_block(c, free_block, size, alignment);
+        Memory_block *free_block = &c->free_blocks[i];
+        Memory_block *used_block = alloc_block(c, free_block, size, alignment);
 
         if (used_block)  return used_block->data;
     }
 
     // We weren't able to find a block big enough in the free list.
     // We need to add a new buffer to the context.
-    Memory_Block *free_block = grow_context(context, size);
+    Memory_block *free_block = grow_context(context, size);
 
     return alloc_block(c, free_block, size, alignment)->data;
 }
 
-void *zero_alloc(Memory_Context *context, s64 count, u64 unit_size)
+void *zero_alloc(Memory_context *context, s64 count, u64 unit_size)
 {
     void *data = alloc(context, count, unit_size);
 
@@ -489,7 +489,7 @@ void *zero_alloc(Memory_Context *context, s64 count, u64 unit_size)
     return data;
 }
 
-void dealloc(Memory_Context *context, void *data)
+void dealloc(Memory_context *context, void *data)
 {
     assert(data);
 
@@ -498,15 +498,15 @@ void dealloc(Memory_Context *context, void *data)
         return;
     }
 
-    Memory_Block *used_block = find_used_block(context, data);
+    Memory_block *used_block = find_used_block(context, data);
     assert(used_block);
 
     dealloc_block(context, used_block);
 }
 
-void *resize(Memory_Context *context, void *data, s64 new_limit, u64 unit_size)
+void *resize(Memory_context *context, void *data, s64 new_limit, u64 unit_size)
 {
-    Memory_Context *c = context;
+    Memory_context *c = context;
 
     assert(data);
     assert(new_limit);
@@ -520,10 +520,10 @@ void *resize(Memory_Context *context, void *data, s64 new_limit, u64 unit_size)
         return new_data;
     }
 
-    Memory_Block *used_block = find_used_block(c, data);
+    Memory_block *used_block = find_used_block(c, data);
     assert(used_block);
 
-    Memory_Block *resized = resize_block(context, used_block, new_size);
+    Memory_block *resized = resize_block(context, used_block, new_size);
     if (resized)  return resized->data;
 
     // We can't resize the block in place. We'll have to move it.
@@ -550,18 +550,18 @@ void *resize(Memory_Context *context, void *data, s64 new_limit, u64 unit_size)
     return new_data;
 }
 
-Memory_Context *new_context(Memory_Context *parent)
+Memory_context *new_context(Memory_context *parent)
 {
-    Memory_Context *context = New(Memory_Context, parent);
+    Memory_context *context = New(Memory_context, parent);
 
     context->parent = parent;
 
     return context;
 }
 
-void free_context(Memory_Context *context)
+void free_context(Memory_context *context)
 {
-    Memory_Context *c = context;
+    Memory_context *c = context;
 
     // This automatically frees all child contexts because they all allocated from this parent.
 
@@ -576,9 +576,9 @@ void free_context(Memory_Context *context)
     dealloc(c->parent, c);
 }
 
-void reset_context(Memory_Context *context)
+void reset_context(Memory_context *context)
 {
-    Memory_Context *c = context;
+    Memory_context *c = context;
 
     c->free_count = 0;
     c->used_count = 0;
@@ -597,7 +597,7 @@ void reset_context(Memory_Context *context)
     assert_context_makes_sense(c);
 }
 
-char *copy_string(char *source, Memory_Context *context)
+char *copy_string(char *source, Memory_context *context)
 {
     int length = strlen(source);
     char *copy = alloc(context, length+1, sizeof(char));

@@ -3,30 +3,30 @@
 
 #include "basic.h"
 
-typedef struct Memory_Block   Memory_Block;
-typedef struct Memory_Context Memory_Context;
+typedef struct Memory_block   Memory_block;
+typedef struct Memory_context Memory_context;
 
-struct Memory_Context {
-    Memory_Context *parent;
+struct Memory_context {
+    Memory_context *parent;
 
     // Backing memory the context has allocated from its parent, or if the parent is NULL,
     // directly from the operating system.
-    Memory_Block   *buffers;
+    Memory_block   *buffers;
     s64             buffer_count;
     s64             buffer_limit;
 
     // Array of free memory blocks, sorted by size then address.
-    Memory_Block   *free_blocks;
+    Memory_block   *free_blocks;
     s64             free_count;
     s64             free_limit;
 
     // Array of allocated memory blocks, sorted by address.
-    Memory_Block   *used_blocks;
+    Memory_block   *used_blocks;
     s64             used_count;
     s64             used_limit;
 };
 
-// A Memory_Context tracks three kinds of Memory_Blocks: buffers, free blocks and used blocks.
+// A Memory_context tracks three kinds of Memory_blocks: buffers, free blocks and used blocks.
 // Buffers are the backing memory. They track the allocations the context makes from its parent.
 // Every byte in a context's buffers is also tracked in either a free block or a used block
 // depending on whether the byte is allocated. Free blocks are sorted by size so we can quickly find
@@ -44,21 +44,21 @@ struct Memory_Context {
 // the `sentinel` flag. Maybe the sentinels could be zero-sized. But we could no longer rely on the
 // assumption that no two used blocks have the same address. However this would improve memory
 // fragmentation. |Speed |Memory
-struct Memory_Block {
+struct Memory_block {
     u8  *data;
     u64  size:     8*sizeof(u64)-1;
     bool sentinel: 1;
 };
 
-void *double_if_needed(void *data, s64 *limit, s64 count, u64 unit_size, Memory_Context *context);
-void *alloc(Memory_Context *context, s64 count, u64 unit_size);
-void *zero_alloc(Memory_Context *context, s64 count, u64 unit_size);
-void dealloc(Memory_Context *context, void *data);
-void *resize(Memory_Context *context, void *data, s64 new_limit, u64 unit_size);
-Memory_Context *new_context(Memory_Context *parent);
-void free_context(Memory_Context *context);
-void reset_context(Memory_Context *context);
-char *copy_string(char *source, Memory_Context *context);
+void *double_if_needed(void *data, s64 *limit, s64 count, u64 unit_size, Memory_context *context);
+void *alloc(Memory_context *context, s64 count, u64 unit_size);
+void *zero_alloc(Memory_context *context, s64 count, u64 unit_size);
+void dealloc(Memory_context *context, void *data);
+void *resize(Memory_context *context, void *data, s64 new_limit, u64 unit_size);
+Memory_context *new_context(Memory_context *parent);
+void free_context(Memory_context *context);
+void reset_context(Memory_context *context);
+char *copy_string(char *source, Memory_context *context);
 
 #define New2(TYPE, CONTEXT)         (TYPE *)zero_alloc((CONTEXT), 1, sizeof(TYPE))
 #define New3(COUNT, TYPE, CONTEXT)  (TYPE *)zero_alloc((CONTEXT), (COUNT), sizeof(TYPE))
