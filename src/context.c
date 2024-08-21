@@ -91,17 +91,17 @@ static s64 get_used_block_index(Memory_context *context, u8 *data)
 
         s64 cmp = data - block->data;
         if (!cmp) {
-            // Only return the index if it's not a sentinel.
-            if (block->size)  return mid;
-
-            block += 1;
-            // There may be two sentinels with the same address if the context has two contiguous buffers:
-            // one for the end of the first buffer and for the start of the second. So maybe skip one more.
-            if (block->data == data && !block->size)  block += 1;
-
-            s64 index = block - context->used_blocks;
-            assert(index <= context->used_count);
-            return index;
+            // If it's a sentinel, return the next index.
+            if (!block->size) {
+                mid += 1;
+                // There may be two sentinels with the same address if the context has two contiguous buffers:
+                // one for the end of the first buffer and for the start of the second. So maybe skip one more.
+                if (mid < context->used_count) {
+                    block = &context->used_blocks[mid];
+                    if (block->data == data && !block->size)  mid += 1;
+                }
+            }
+            return mid;
         }
 
         if (cmp < 0)  j = mid-1;

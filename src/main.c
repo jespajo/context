@@ -39,7 +39,7 @@ int main()
 
     Memory_context *ctx = new_context(NULL);
 
-    s64 num_loops = 1<<13;
+    s64 num_loops = 1<<16;
 
     for (s64 loop = 0; loop < num_loops; loop++) {
         // Make a random number of allocations.
