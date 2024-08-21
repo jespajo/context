@@ -1,32 +1,23 @@
-// alloc() and resize() do not currently assert that their Memory_context arguments are not NULL.
-// This should probably change, because it's too easy to accidentally create a new context:
-//
-//      u8_array array = {0};
-//      *Add(&array) = 1; // |Leak! A memory context for the array was created in the background.
-//
-// But memory leaks created in this way aren't hard to find: put a breakpoint in new_context() for
-// when parent == NULL. Generally there should only be one hit for the top-level context.
+//|Todo: Some kind of visualisation would be really helpful.
 
-// Some kind of visualisation would be really helpful.
-
-// At the moment we frequently operate on the arrays of blocks by deleting a block with
-// delete_block() and then adding blocks with add_free_block() or add_used_block(). Each of these
-// functions leaves the array sorted, so if we delete the first block in the array, it will shift
-// all subsequent blocks to the left, and if we then insert a new block at the start of the array,
-// it will shift everything back to the right. There is room for improvement here. |Speed
-
-#include <stdlib.h>
-#include <string.h>
+//|Speed: At the moment we frequently operate on the arrays of blocks by deleting a block with delete_block() and then adding
+// blocks with add_free_block() or add_used_block(). Each of these functions leaves the array sorted, so if we delete the first
+// block in the array, it will shift all subsequent blocks to the left, and if we then insert a new block at the start of the
+// array, it will shift everything back to the right. There is room for improvement here. Solving this may involve some kind of
+// transaction-based approach---you'd store up the changes you want to make (delete this block, insert two before that one) and
+// then make all the changes at once. Maybe if we had these kinds of transactions we could even make memory contexts
+// threadsafe---though threads sharing a context is probably a bad idea anyway because contention would make it slow.
 
 #include "context.h"
 
 void *double_if_needed(void *data, s64 *limit, s64 count, u64 unit_size, Memory_context *context)
-// Make sure there's room for at least one more item in the array. If reallocation occurs, modify
-// *limit and return a pointer to the new data. Otherwise return `data`.
+// Make sure there's room for at least one more item in the array. If reallocation occurs, modify *limit and
+// return a pointer to the new data. Otherwise return data.
 //
-// This function modifies *limit, so why don't we just make the first parameter `void **data` and
-// get the function to modify *data as well? The reason is that the compiler lets us implicitly cast
-// e.g. `int *` to `void *`, but not `int **` to `void **`.
+// You may ask, if this function modifies *limit, why does it rely on its caller to assign the return value
+// to data themselves? Couldn't we just make make the first parameter `void **data` and get the function to
+// modify *data as well? No. The reason is that the compiler lets us implicitly cast e.g. `int *` to `void *`,
+// but not `int **` to `void **`.
 {
     s64 INITIAL_LIMIT = 4; // If the array is unitialised, how many units to make room for in the first allocation.
 
@@ -40,9 +31,9 @@ void *double_if_needed(void *data, s64 *limit, s64 count, u64 unit_size, Memory_
         // The array needs to be resized.
         assert(count == *limit);
 
-        // Make sure we only use this function for arrays that should increase in powers of two.
-        // This assert will trip if we use array_reserve() to allocate a non-power-of-two number of bytes
-        // and the array needs to be resized later.
+        // Make sure we only use this function for arrays that should increase in powers of two. If this assert trips,
+        // it probably means we used array_reserve() to reserve a non-power-of-two number of bytes for an array and then
+        // exceeded this limit with Add(). In this case, round up the array_reserve() argument to a power of two.
         assert(is_power_of_two(*limit));
 
         *limit *= 2;
@@ -99,7 +90,19 @@ static s64 get_used_block_index(Memory_context *context, u8 *data)
         Memory_block *block = &context->used_blocks[mid];
 
         s64 cmp = data - block->data;
-        if (!cmp)  return mid;
+        if (!cmp) {
+            // Only return the index if it's not a sentinel.
+            if (block->size)  return mid;
+
+            block += 1;
+            // There may be two sentinels with the same address if the context has two contiguous buffers:
+            // one for the end of the first buffer and for the start of the second. So maybe skip one more.
+            if (block->data == data && !block->size)  block += 1;
+
+            s64 index = block - context->used_blocks;
+            assert(index < context->used_count); //|Temporary. I am pretty sure this is impossible.
+            return index;
+        }
 
         if (cmp < 0)  j = mid-1;
         else          i = mid+1;
@@ -145,6 +148,10 @@ static bool are_in_used_order(Memory_block *blocks, s64 count)
 {
     for (s64 i = 0; i < count-1; i++) {
         if (blocks[i].data > blocks[i+1].data)  return false;
+
+        if (blocks[i].data == blocks[i+1].data) {
+            if (blocks[i].size)  return false;
+        }
     }
     return true;
 }
@@ -168,8 +175,7 @@ static void assert_context_makes_sense(Memory_context *context)
 
         Memory_block *last_used = find_used_block(c, data);
         assert(last_used->data == buffer->data);
-        assert(last_used->size == 1);
-        assert(last_used->sentinel);
+        assert(last_used->size == 0);
 
         data     += 1;
         num_used += 1;
@@ -181,7 +187,7 @@ static void assert_context_makes_sense(Memory_context *context)
                 num_used += 1;
                 last_used = used_block;
 
-                if (used_block->sentinel)  break;
+                if (!used_block->size)  break;
                 continue;
             }
 
@@ -248,11 +254,7 @@ static Memory_block *add_used_block(Memory_context *context, u8 *data, u64 size)
 }
 
 static Memory_block *grow_context(Memory_context *context, u64 size)
-// Add a new buffer of at least `size` bytes to a context. Return the associated free block. It
-// might seem like a good idea to make `size` a power of two. But in this case, the actual size of
-// the buffer created will be double `size`. The reason is that we have to reserve the first and
-// last byte of the buffer as sentinels. Reserving the first byte effectively takes the first 16 out
-// of action for large allocations due to alignment.
+// Add a new buffer of at least `size` bytes to a context. Return the associated free block.
 {
     u64 FIRST_BUFFER_SIZE = 8192;
 
@@ -266,11 +268,8 @@ static Memory_block *grow_context(Memory_context *context, u64 size)
     if (!c->buffer_count)  buffer.size = FIRST_BUFFER_SIZE;
     else                   buffer.size = 2 * c->buffers[c->buffer_count-1].size;
 
-    // Keep doubling until we know we have room for an allocation of length `size`. We need to be
-    // conservative here. Even though the first sentinel only takes the first byte of a new buffer,
-    // it effectively prevents large allocations for the first 16 bytes due to alignment issues.
-    // We won't need to take anything from size once we remove sentinels. |Memory |Hack
-    while ((buffer.size - 16 - 1) < size)  buffer.size *= 2;
+    // Keep doubling until we know we have room for an allocation of length `size`.
+    while (buffer.size < size)  buffer.size *= 2;
 
     buffer.data = alloc(c->parent, 1, buffer.size);
 
@@ -279,9 +278,9 @@ static Memory_block *grow_context(Memory_context *context, u64 size)
     c->buffers[c->buffer_count] = buffer;
     c->buffer_count += 1;
 
-    // Reserve the buffer's first and last bytes as sentinels.
-    add_used_block(c, buffer.data,               1)->sentinel = true;
-    add_used_block(c, buffer.data+buffer.size-1, 1)->sentinel = true;
+    // Create sentinel used blocks at the beginning and end of the buffer.
+    add_used_block(c, buffer.data,               0);
+    add_used_block(c, buffer.data + buffer.size, 0);
 
     Memory_block *free_block = add_free_block(c, buffer.data+1, buffer.size-2);
 
@@ -362,7 +361,7 @@ static Memory_block *dealloc_block(Memory_context *context, Memory_block *used_b
     Memory_context *c = context;
 
     assert(in_range(c->used_blocks, used_block, c->used_blocks+c->used_count));
-    assert(!used_block->sentinel); // |Cleanup: If we're only going to do this during debug builds, we should probably not bother with the `sentinel` flag and we can make the whole check more expensive.
+    assert(used_block->size);
 
     // |Speed: For now we're just going to add and delete the relevant blocks one at a time.
 
@@ -534,7 +533,7 @@ void *resize(Memory_context *context, void *data, s64 new_limit, u64 unit_size)
 
     // `alloc` may have made an unknown number of allocations or reallocations. Which means the used
     // block's index might have changed and the whole array of used blocks might have moved. We need
-    // to find the old used block in this case so we can deallocate it.
+    // to find the old used block in this case so we can deallocate it. |Speed
     used_block = &c->used_blocks[old_index];
     if ((u8 *)data < used_block->data) {
         do used_block -= 1;  while (data != used_block->data);
@@ -588,10 +587,10 @@ void reset_context(Memory_context *context)
         u64 size = c->buffers[i].size;
 
         // Add the sentinels.
-        add_used_block(c, data,        1)->sentinel = true;
-        add_used_block(c, data+size-1, 1)->sentinel = true;
+        add_used_block(c, data,      0);
+        add_used_block(c, data+size, 0);
 
-        add_free_block(c, data+1, size-2);
+        add_free_block(c, data, size);
     }
 
     assert_context_makes_sense(c);

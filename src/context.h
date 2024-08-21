@@ -6,11 +6,15 @@
 typedef struct Memory_block   Memory_block;
 typedef struct Memory_context Memory_context;
 
+struct Memory_block {
+    u8  *data;
+    u64  size;
+};
+
 struct Memory_context {
     Memory_context *parent;
 
-    // Backing memory the context has allocated from its parent, or if the parent is NULL,
-    // directly from the operating system.
+    // Backing memory the context has allocated from its parent (or from the operating system if the parent is NULL).
     Memory_block   *buffers;
     s64             buffer_count;
     s64             buffer_limit;
@@ -24,30 +28,6 @@ struct Memory_context {
     Memory_block   *used_blocks;
     s64             used_count;
     s64             used_limit;
-};
-
-// A Memory_context tracks three kinds of Memory_blocks: buffers, free blocks and used blocks.
-// Buffers are the backing memory. They track the allocations the context makes from its parent.
-// Every byte in a context's buffers is also tracked in either a free block or a used block
-// depending on whether the byte is allocated. Free blocks are sorted by size so we can quickly find
-// a best fit. Used blocks are sorted by address for speedy deallocation. On deallocation, a newly
-// freed block coalesces with contiguous free blocks.
-//
-// The `sentinel` flag only appears in the used blocks array. Sentinels are blocks of one byte
-// marking the first and last byte in each backing buffer. They help with deallocation because they
-// let us infer the size of the free blocks "missing" from the used blocks array (otherwise we
-// wouldn't know whether gaps between neighbouring used blocks occur because there's a free block in
-// between or because the used blocks are in different buffers). Sentinels behave like used blocks
-// except that everything will probably break if you try to deallocate one.
-//
-// One day we want to stop reserving any bytes for the sentinel blocks. Ideally we could also remove
-// the `sentinel` flag. Maybe the sentinels could be zero-sized. But we could no longer rely on the
-// assumption that no two used blocks have the same address. However this would improve memory
-// fragmentation. |Speed |Memory
-struct Memory_block {
-    u8  *data;
-    u64  size:     8*sizeof(u64)-1;
-    bool sentinel: 1;
 };
 
 void *double_if_needed(void *data, s64 *limit, s64 count, u64 unit_size, Memory_context *context);
