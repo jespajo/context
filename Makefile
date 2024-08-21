@@ -12,9 +12,9 @@ ifdef OS
     cflags += /Z7
     cflags += /Fo: $@
 
-    lflags += C:\Users\jtpj\glfw\lib-vc2022\glfw3_mt.lib
-    lflags += opengl32.lib user32.lib gdi32.lib shell32.lib
-    lflags += ws2_32.lib # Link with winsock2.h for src/png.c.
+    #lflags += C:\Users\jtpj\glfw\lib-vc2022\glfw3_mt.lib
+    #lflags += opengl32.lib user32.lib gdi32.lib shell32.lib
+    #lflags += ws2_32.lib # Link with winsock2.h.
     lflags += /Z7
     lflags += /Fe: $@
 else
@@ -34,8 +34,8 @@ else
     cflags += -MT bin/$*.o -MT bin/$*.obj # Yucky! We tell the compiler on Linux to output dependency-tracking info for both Linux and Windows.
     cflags += -o $@
 
-    lflags += -L /usr/local/lib/glfw/build-x11/src/
-    lflags += -lglfw3 -lrt -lm -ldl -lX11 -lm -pthread -lffi -lGL
+    #lflags += -L /usr/local/lib/glfw/build-x11/src/
+    #lflags += -lglfw3 -lrt -lm -ldl -lX11 -lm -pthread -lffi -lGL
     lflags += -o $@
 
     # Run targets:
@@ -69,7 +69,7 @@ bin/%$x:  bin/%$o $(shared_obj);  $(cc) $^ $(lflags)
 
 bin/%$o:  src/%.c;  $(cc) -c $(cflags) $<
 
-tags:  $(sources);  ctags --recurse src/ include/
+tags:  $(sources);  ctags --recurse src/
 
 tidy:  ;  rm -f core.*
 clean:  tidy;  rm -rf bin tags
