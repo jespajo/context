@@ -24,7 +24,7 @@ else
     find := find
 
     cc := gcc
-    fsan := -fsanitize=address,undefined
+    #fsan := -fsanitize=address,undefined
 
     cflags += -Wall -Werror
     cflags += -Wno-unused
@@ -37,16 +37,18 @@ else
     lflags += -L /usr/local/lib/glfw/build-x11/src/
     lflags += -lglfw3 -lrt -lm -ldl -lX11 -lm -pthread -lffi -lGL
     lflags += -o $@
+
+    # Run targets:
+    all:  ;  bin/main$x
 endif
 
 # Build targets:
 all:  bin/main$x
 all:  tags
 
-# Run targets:
-all:  ;  bin/main$x
-
+#|Temporary:
 cflags += -DDEBUG
+cflags += -DDEBUG_MEMORY_CONTEXT
 cflags += $(fsan)
 ifeq ($(cc),gcc)
   cflags += -Wno-missing-braces

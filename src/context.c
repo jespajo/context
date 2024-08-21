@@ -100,7 +100,7 @@ static s64 get_used_block_index(Memory_context *context, u8 *data)
             if (block->data == data && !block->size)  block += 1;
 
             s64 index = block - context->used_blocks;
-            assert(index < context->used_count); //|Temporary. I am pretty sure this is impossible.
+            assert(index <= context->used_count);
             return index;
         }
 
@@ -173,40 +173,48 @@ static void assert_context_makes_sense(Memory_context *context)
 
         u8 *data = buffer->data;
 
-        Memory_block *last_used = find_used_block(c, data);
+        Memory_block *last_used; {
+            s64 index = get_used_block_index(c, data);
+            last_used = &c->used_blocks[index-1];
+        }
         assert(last_used->data == buffer->data);
         assert(last_used->size == 0);
 
-        data     += 1;
         num_used += 1;
 
         while (data < buffer_end) {
             Memory_block *used_block = find_used_block(c, data);
             if (used_block) {
+                assert(used_block->size);
+
                 data     += used_block->size;
                 num_used += 1;
                 last_used = used_block;
+            } else {
+                s64 last_used_index = last_used - c->used_blocks;
+                assert(last_used_index < c->used_count-1);
 
-                if (!used_block->size)  break;
-                continue;
+                u8 *next_data = (last_used+1)->data;
+                assert(next_data <= buffer_end);
+
+                s64 free_size = next_data - data;
+                Memory_block *free_block = find_free_block(c, free_size, data);
+                assert(free_block);
+
+                data     += free_block->size;
+                num_free += 1;
             }
-
-            s64 last_used_index = last_used - c->used_blocks;
-            assert(last_used_index < c->used_count-1);
-
-            u8 *next_data = (last_used+1)->data;
-            assert(next_data < buffer_end);
-
-            s64 free_size = next_data - data;
-            Memory_block *free_block = find_free_block(c, free_size, data);
-            assert(free_block);
-
-            data     += free_block->size;
-            num_free += 1;
         }
 
-        assert(last_used->sentinel);
         assert(data == buffer_end);
+
+        last_used += 1;
+        assert(last_used - c->used_blocks < c->used_count);
+
+        assert(last_used->data == buffer_end);
+        assert(last_used->size == 0);
+
+        num_used += 1;
     }
 
     assert(num_free == c->free_count);
@@ -238,7 +246,18 @@ static Memory_block *add_used_block(Memory_context *context, u8 *data, u64 size)
 {
     Memory_context *c = context;
 
-    assert(data && size);
+    assert(data);
+    if (!size) { //|Cleanup: Factor out or remove this assertion that this zero-sized used block is a sentinel?
+        bool is_sentinel = false;
+        for (s64 i = 0; i < context->buffer_count; i++) {
+            Memory_block *buffer = &context->buffers[i];
+            if (data == buffer->data || data == (buffer->data + buffer->size)) {
+                is_sentinel = true;
+                break;
+            }
+        }
+        assert(is_sentinel);
+    }
 
     c->used_blocks = double_if_needed(c->used_blocks, &c->used_limit, c->used_count, sizeof(*c->used_blocks), c->parent);
 
@@ -282,7 +301,7 @@ static Memory_block *grow_context(Memory_context *context, u64 size)
     add_used_block(c, buffer.data,               0);
     add_used_block(c, buffer.data + buffer.size, 0);
 
-    Memory_block *free_block = add_free_block(c, buffer.data+1, buffer.size-2);
+    Memory_block *free_block = add_free_block(c, buffer.data, buffer.size);
 
     assert_context_makes_sense(c);
 
@@ -533,12 +552,12 @@ void *resize(Memory_context *context, void *data, s64 new_limit, u64 unit_size)
 
     // `alloc` may have made an unknown number of allocations or reallocations. Which means the used
     // block's index might have changed and the whole array of used blocks might have moved. We need
-    // to find the old used block in this case so we can deallocate it. |Speed
+    // to find the old used block in this case so we can deallocate it.
     used_block = &c->used_blocks[old_index];
     if ((u8 *)data < used_block->data) {
         do used_block -= 1;  while (data != used_block->data);
-    } else if ((u8 *)data > used_block->data) {
-        do used_block += 1;  while (data != used_block->data);
+    } else if ((u8 *)data > used_block->data || !used_block->size) {
+        do used_block += 1;  while (data != used_block->data || !used_block->size);
     }
 
     u64 copy_size = Min(used_block->size, new_size);
