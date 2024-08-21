@@ -388,6 +388,10 @@ static Memory_block *dealloc_block(Memory_context *context, Memory_block *used_b
     u64 freed_size = used_block->size;
     s64 used_index = used_block - c->used_blocks;
 
+#ifdef DEBUG_MEMORY_CONTEXT
+    memset(freed_data, -1, freed_size);
+#endif
+
     // These asserts should always be true due to the presence of sentinels. If they are untrue
     // the pointer arithmetic used below to check the neighbouring used blocks is invalid.
     assert(used_index > 0);

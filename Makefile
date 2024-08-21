@@ -30,6 +30,7 @@ else
     cflags += -Wno-unused
     cflags += -std=c99 # The lack of -pedantic allows anonymous unions in structs.
     cflags += -g3
+    cflags += -O2
     cflags += -MMD -MP
     cflags += -MT bin/$*.o -MT bin/$*.obj # Yucky! We tell the compiler on Linux to output dependency-tracking info for both Linux and Windows.
     cflags += -o $@
@@ -37,14 +38,14 @@ else
     #lflags += -L /usr/local/lib/glfw/build-x11/src/
     #lflags += -lglfw3 -lrt -lm -ldl -lX11 -lm -pthread -lffi -lGL
     lflags += -o $@
-
-    # Run targets:
-    all:  ;  bin/main$x
 endif
 
 # Build targets:
 all:  bin/main$x
 all:  tags
+
+# Run targets:
+#all:  ;  bin/main$x
 
 #|Temporary:
 cflags += -DDEBUG
