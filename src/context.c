@@ -31,9 +31,9 @@ void *double_if_needed(void *data, s64 *limit, s64 count, u64 unit_size, Memory_
         // The array needs to be resized.
         assert(count == *limit);
 
-        // Make sure we only use this function for arrays that should increase in powers of two. If this assert trips,
-        // it probably means we used array_reserve() to reserve a non-power-of-two number of bytes for an array and then
-        // exceeded this limit with Add(). In this case, round up the array_reserve() argument to a power of two.
+        // Make sure we only use this function for arrays that should increase in powers of two. This assert will trip
+        // if we use array_reserve() to reserve a non-power-of-two number of bytes for an array and then exceed this
+        // limit with Add(). In this case, just round up the array_reserve() argument to a power of two.
         assert(is_power_of_two(*limit));
 
         *limit *= 2;

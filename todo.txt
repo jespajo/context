@@ -1,5 +1,21 @@
+Reorder the functions in context.c
+
 Rename alloc -> alloc_ etc. and create externally linked versions that assert they have a non-null context
 
 Cleanup assert_context_makes_sense() and in_range()
 
 Just have DEBUG/NDEBUG, not both
+
+Add usage comment above assert() and New()
+
+Later:
+-----
+    Port the Array stuff
+
+    Write a bunch of tests for the Array stuff
+
+    Port the Map stuff
+
+    Write tests for Maps
+
+    Map v2!
