@@ -230,6 +230,7 @@ static bool is_sentinel(Memory_context *context, u8 *data, u64 size)
 
     for (s64 i = 0; i < context->buffer_count; i++) {
         Memory_block *buffer = &context->buffers[i];
+
         if (data == buffer->data)                 return true;
         if (data == buffer->data + buffer->size)  return true;
     }
@@ -238,6 +239,7 @@ static bool is_sentinel(Memory_context *context, u8 *data, u64 size)
 }
 
 static Memory_block *add_block(Memory_context *context, Memory_block **blocks, void *data, u64 size)
+// Add a block with the specified pointer and size to an array of Memory_blocks, maintaining the array's order.
 {
     Memory_context *c = context;
 
@@ -264,48 +266,8 @@ static Memory_block *add_block(Memory_context *context, Memory_block **blocks, v
     return &(*blocks)[insert_index];
 }
 
-static Memory_block *add_free_block(Memory_context *context, void *data, u64 size) //|Deprecated?
-{
-    Memory_context *c = context;
-
-    assert(data);
-    assert(size);
-
-    c->free_blocks = double_if_needed(c->free_blocks, &c->free_limit, c->free_count, sizeof(*c->free_blocks), c->parent);
-
-    s64 insert_index = get_free_block_index(c, size, data);
-
-    // Make room by shifting everything after block_index right one.
-    for (s64 i = c->free_count; i > insert_index; i--)  c->free_blocks[i] = c->free_blocks[i-1];
-
-    c->free_blocks[insert_index] = (Memory_block){.data=data, .size=size};
-    c->free_count += 1;
-
-    return &c->free_blocks[insert_index];
-}
-
-static Memory_block *add_used_block(Memory_context *context, u8 *data, u64 size) //|Deprecated?
-{
-    Memory_context *c = context;
-
-    assert(data);
-    assert(size || is_sentinel(context, data, size));
-
-    c->used_blocks = double_if_needed(c->used_blocks, &c->used_limit, c->used_count, sizeof(*c->used_blocks), c->parent);
-
-    s64 insert_index = get_used_block_index(c, data);
-
-    // Make room by shifting everything after block_index right one.
-    for (s64 i = c->used_count; i > insert_index; i--)  c->used_blocks[i] = c->used_blocks[i-1];
-
-    c->used_blocks[insert_index] = (Memory_block){.data=data, .size=size};
-    c->used_count += 1;
-
-    return &c->used_blocks[insert_index];
-}
-
 static Memory_block *grow_context(Memory_context *context, u64 size)
-// Add a new buffer of at least `size` bytes to a context. Return the associated free block.
+// Add a new buffer of at least size bytes to a context. Return the associated free block.
 {
     u64 FIRST_BUFFER_SIZE = 8192;
 

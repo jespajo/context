@@ -1,10 +1,6 @@
-Amalgamate find_block and add_block functions
-
-Test out removing zero_alloc---do we actually need it or is memset enough?
+Change order of alloc etc. arguments
 
 Rename alloc -> alloc_ etc. and create externally linked versions that assert they have a non-null context
-
-Split up create_context and create_top_context
 
 Cleanup assert_context_makes_sense()
 
