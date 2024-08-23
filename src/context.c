@@ -1,12 +1,12 @@
 //|Todo: Some kind of visualisation would be really helpful.
 
 //|Speed: At the moment we frequently operate on the arrays of blocks by deleting a block with delete_block() and then adding
-// blocks with add_free_block() or add_used_block(). Each of these functions leaves the array sorted, so if we delete the first
-// block in the array, it will shift all subsequent blocks to the left, and if we then insert a new block at the start of the
-// array, it will shift everything back to the right. There is room for improvement here. Solving this may involve some kind of
-// transaction-based approach---you'd store up the changes you want to make (delete this block, insert two before that one) and
-// then make all the changes at once. Maybe if we had these kinds of transactions we could even make memory contexts
-// threadsafe---though threads sharing a context is probably a bad idea anyway because contention would make it slow.
+// blocks with add_block(). Each of these functions leaves the array sorted, so if we delete the first block in the array, it
+// will shift all subsequent blocks to the left, and if we then insert a new block at the start of the array, it will shift
+// everything back to the right. There is room for improvement here. Solving this may involve some kind of transaction-based
+// approach---you'd store up the changes you want to make (delete this block, insert two before that one) and then make all the
+// changes at once. Maybe if we had these kinds of transactions we could even make memory contexts threadsafe---though threads
+// sharing a context is probably a bad idea anyway because contention would make it slow.
 
 #include "context.h"
 
@@ -251,7 +251,7 @@ static Memory_block *add_block(Memory_context *context, Memory_block **blocks, v
     s64 *count = is_used ? &c->used_count : &c->free_count;
     s64 *limit = is_used ? &c->used_limit : &c->free_limit;
 
-    *blocks = double_if_needed(blocks, limit, *count, sizeof(**blocks), c->parent);
+    *blocks = double_if_needed(*blocks, limit, *count, sizeof(**blocks), c->parent);
 
     s64 insert_index = is_used ? get_used_block_index(c, data) : get_free_block_index(c, size, data);
 
@@ -330,10 +330,10 @@ static Memory_block *grow_context(Memory_context *context, u64 size)
     c->buffer_count += 1;
 
     // Create sentinel used blocks at the beginning and end of the buffer.
-    add_used_block(c, buffer.data,               0);
-    add_used_block(c, buffer.data + buffer.size, 0);
+    add_block(c, &c->used_blocks, buffer.data,               0);
+    add_block(c, &c->used_blocks, buffer.data + buffer.size, 0);
 
-    Memory_block *free_block = add_free_block(c, buffer.data, buffer.size);
+    Memory_block *free_block = add_block(c, &c->free_blocks, buffer.data, buffer.size);
 
     assert_context_makes_sense(c);
 
@@ -392,13 +392,13 @@ static Memory_block *alloc_block(Memory_context *context, Memory_block *free_blo
 
     delete_block(c->free_blocks, &c->free_count, free_block);
 
-    if (padding)  add_free_block(c, free_data, padding);
+    if (padding)  add_block(c, &c->free_blocks, free_data, padding);
 
-    Memory_block *used_block = add_used_block(c, free_data+padding, size);
+    Memory_block *used_block = add_block(c, &c->used_blocks, free_data+padding, size);
 
     if (remaining) {
         u8 *next_free = used_block->data + used_block->size;
-        add_free_block(c, next_free, remaining);
+        add_block(c, &c->free_blocks, next_free, remaining);
     }
 
     assert_context_makes_sense(c);
@@ -455,7 +455,7 @@ static Memory_block *dealloc_block(Memory_context *context, Memory_block *used_b
 
     delete_block(c->used_blocks, &c->used_count, used_block);
 
-    Memory_block *freed_block = add_free_block(c, freed_data, freed_size);
+    Memory_block *freed_block = add_block(c, &c->free_blocks, freed_data, freed_size);
 
     assert_context_makes_sense(c);
 
@@ -495,7 +495,7 @@ static Memory_block *resize_block(Memory_context *context, Memory_block *used_bl
 
     delete_block(c->free_blocks, &c->free_count, free_neighbour);
 
-    if (remaining_after)  add_free_block(c, new_end_of_used_block, remaining_after);
+    if (remaining_after)  add_block(c, &c->free_blocks, new_end_of_used_block, remaining_after);
 
     assert_context_makes_sense(c);
 
@@ -642,10 +642,10 @@ void reset_context(Memory_context *context)
         u64 size = c->buffers[i].size;
 
         // Add the sentinels.
-        add_used_block(c, data,      0);
-        add_used_block(c, data+size, 0);
+        add_block(c, &c->used_blocks, data,      0);
+        add_block(c, &c->used_blocks, data+size, 0);
 
-        add_free_block(c, data, size);
+        add_block(c, &c->free_blocks, data, size);
     }
 
     assert_context_makes_sense(c);
