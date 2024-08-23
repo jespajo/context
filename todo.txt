@@ -1,5 +1,3 @@
-Reorder the functions in context.c
-
 Rename alloc -> alloc_ etc. and create externally linked versions that assert they have a non-null context
 
 Cleanup assert_context_makes_sense() and in_range()

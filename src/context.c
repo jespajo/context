@@ -10,39 +10,6 @@
 
 #include "context.h"
 
-void *double_if_needed(void *data, s64 *limit, s64 count, u64 unit_size, Memory_context *context)
-// Make sure there's room for at least one more item in the array. If reallocation occurs, modify *limit and
-// return a pointer to the new data. Otherwise return data.
-//
-// You may ask, if this function modifies *limit, why does it rely on its caller to assign the return value
-// to data themselves? Couldn't we just make make the first parameter `void **data` and get the function to
-// modify *data as well? No. The reason is that the compiler lets us implicitly cast e.g. `int *` to `void *`,
-// but not `int **` to `void **`.
-{
-    s64 INITIAL_LIMIT = 4; // If the array is unitialised, how many units to make room for in the first allocation.
-
-    if (!data) {
-        // The array needs to be initialised.
-        assert(*limit == 0 && count == 0);
-
-        *limit = INITIAL_LIMIT;
-        data   = alloc(*limit, unit_size, context);
-    } else if (count >= *limit) {
-        // The array needs to be resized.
-        assert(count == *limit);
-
-        // Make sure we only use this function for arrays that should increase in powers of two. This assert will trip
-        // if we use array_reserve() to reserve a non-power-of-two number of bytes for an array and then exceed this
-        // limit with Add(). In this case, just round up the array_reserve() argument to a power of two.
-        assert(is_power_of_two(*limit));
-
-        *limit *= 2;
-        data    = resize(data, *limit, unit_size, context);
-    }
-
-    return data;
-}
-
 static s64 get_free_block_index(Memory_context *context, u64 size, u8 *data)
 // Return the index of the block if it exists or the index where it would be inserted.
 {
@@ -64,19 +31,6 @@ static s64 get_free_block_index(Memory_context *context, u64 size, u8 *data)
     }
 
     return i;
-}
-
-static Memory_block *find_free_block(Memory_context *context, u64 size, u8 *data)
-{
-    s64 index = get_free_block_index(context, size, data);
-
-    if (index < context->free_count) {
-        Memory_block *block = &context->free_blocks[index];
-
-        if (block->data == data && block->size == size)  return block;
-    }
-
-    return NULL;
 }
 
 static s64 get_used_block_index(Memory_context *context, u8 *data)
@@ -111,6 +65,19 @@ static s64 get_used_block_index(Memory_context *context, u8 *data)
     return i;
 }
 
+static Memory_block *find_free_block(Memory_context *context, u64 size, u8 *data)
+{
+    s64 index = get_free_block_index(context, size, data);
+
+    if (index < context->free_count) {
+        Memory_block *block = &context->free_blocks[index];
+
+        if (block->data == data && block->size == size)  return block;
+    }
+
+    return NULL;
+}
+
 static Memory_block *find_used_block(Memory_context *context, u8 *data)
 {
     s64 index = get_used_block_index(context, data);
@@ -122,11 +89,6 @@ static Memory_block *find_used_block(Memory_context *context, u8 *data)
     }
 
     return NULL;
-}
-
-static bool in_range(void *zero, void *x, void *zero_plus_count)
-{
-    return (u64)zero <= (u64)x && (u64)x < (u64)zero_plus_count;
 }
 
 #ifndef DEBUG_MEMORY_CONTEXT
@@ -222,6 +184,11 @@ static void assert_context_makes_sense(Memory_context *context)
 }
 #endif // DEBUG_MEMORY_CONTEXT
 
+static bool in_range(void *zero, void *x, void *zero_plus_count)
+{
+    return (u64)zero <= (u64)x && (u64)x < (u64)zero_plus_count;
+}
+
 static bool is_sentinel(Memory_context *context, u8 *data, u64 size)
 // Return true if the given pointer and size make sense as a sentinel for the given Memory_context
 // (i.e. they would mark the start or end of one of the context's buffers).
@@ -236,6 +203,39 @@ static bool is_sentinel(Memory_context *context, u8 *data, u64 size)
     }
 
     return false;
+}
+
+void *double_if_needed(void *data, s64 *limit, s64 count, u64 unit_size, Memory_context *context)
+// Make sure there's room for at least one more item in the array. If reallocation occurs, modify *limit and
+// return a pointer to the new data. Otherwise return data.
+//
+// You may ask, if this function modifies *limit, why does it rely on its caller to assign the return value
+// to data themselves? Couldn't we just make make the first parameter `void **data` and get the function to
+// modify *data as well? No. The reason is that the compiler lets us implicitly cast e.g. `int *` to `void *`,
+// but not `int **` to `void **`.
+{
+    s64 INITIAL_LIMIT = 4; // If the array is unitialised, how many units to make room for in the first allocation.
+
+    if (!data) {
+        // The array needs to be initialised.
+        assert(*limit == 0 && count == 0);
+
+        *limit = INITIAL_LIMIT;
+        data   = alloc(*limit, unit_size, context);
+    } else if (count >= *limit) {
+        // The array needs to be resized.
+        assert(count == *limit);
+
+        // Make sure we only use this function for arrays that should increase in powers of two. This assert will trip
+        // if we use array_reserve() to reserve a non-power-of-two number of bytes for an array and then exceed this
+        // limit with Add(). In this case, just round up the array_reserve() argument to a power of two.
+        assert(is_power_of_two(*limit));
+
+        *limit *= 2;
+        data    = resize(data, *limit, unit_size, context);
+    }
+
+    return data;
 }
 
 static Memory_block *add_block(Memory_context *context, Memory_block **blocks, void *data, u64 size)
@@ -264,6 +264,20 @@ static Memory_block *add_block(Memory_context *context, Memory_block **blocks, v
     *count += 1;
 
     return &(*blocks)[insert_index];
+}
+
+static void delete_block(Memory_block *blocks, s64 *count, Memory_block *block)
+// Remove a block from an array of blocks. Decrement *count.
+{
+    s64 index = block - blocks;
+    assert(0 <= index && index < *count);
+
+    // Move subsequent blocks left one, then delete the final block.
+    for (s64 i = index+1; i < *count; i++)  blocks[i-1] = blocks[i];
+
+    blocks[*count-1] = (Memory_block){0};
+
+    *count -= 1;
 }
 
 static Memory_block *grow_context(Memory_context *context, u64 size)
@@ -300,20 +314,6 @@ static Memory_block *grow_context(Memory_context *context, u64 size)
     assert_context_makes_sense(c);
 
     return free_block;
-}
-
-static void delete_block(Memory_block *blocks, s64 *count, Memory_block *block)
-// Remove a block from an array of blocks. Decrement *count.
-{
-    s64 index = block - blocks;
-    assert(0 <= index && index < *count);
-
-    // Move subsequent blocks left one, then delete the final block.
-    for (s64 i = index+1; i < *count; i++)  blocks[i-1] = blocks[i];
-
-    blocks[*count-1] = (Memory_block){0};
-
-    *count -= 1;
 }
 
 static u64 get_alignment(u64 unit_size)
@@ -362,6 +362,46 @@ static Memory_block *alloc_block(Memory_context *context, Memory_block *free_blo
         u8 *next_free = used_block->data + used_block->size;
         add_block(c, &c->free_blocks, next_free, remaining);
     }
+
+    assert_context_makes_sense(c);
+
+    return used_block;
+}
+
+static Memory_block *resize_block(Memory_context *context, Memory_block *used_block, u64 new_size)
+// Return the resized block if success, or NULL if there isn't room in a contiguous free block; in that case the caller will have to call alloc_block and dealloc_block.
+{
+    Memory_context *c = context;
+
+    assert(in_range(c->used_blocks+1, used_block, c->used_blocks+c->used_count-1));
+
+    // Don't bother shrinking. (Maybe one day.)
+    if (new_size <= used_block->size)  return used_block;
+
+    Memory_block *next_used = used_block + 1;
+
+    u8 *end_of_used_block = used_block->data + used_block->size;
+    u64 size_avail_after  = next_used->data - end_of_used_block;
+
+    // Return NULL if there's not enough room after the block.
+    // |Todo: Maybe also check if there's room *before* the used block. If so, it would probably be
+    // better than telling the caller to reallocate. We'd have to pass the unit size to this function
+    // or just be super conservative about alignment.
+    if (used_block->size + size_avail_after < new_size)  return NULL;
+
+    // We can expand this block.
+    Memory_block *free_neighbour = find_free_block(c, size_avail_after, end_of_used_block);
+    assert(free_neighbour);
+
+    u64 extra_needed    = new_size - used_block->size;
+    u64 remaining_after = free_neighbour->size - extra_needed;
+
+    used_block->size = new_size;
+    u8 *new_end_of_used_block = used_block->data + new_size;
+
+    delete_block(c->free_blocks, &c->free_count, free_neighbour);
+
+    if (remaining_after)  add_block(c, &c->free_blocks, new_end_of_used_block, remaining_after);
 
     assert_context_makes_sense(c);
 
@@ -424,46 +464,6 @@ static Memory_block *dealloc_block(Memory_context *context, Memory_block *used_b
     return freed_block;
 }
 
-static Memory_block *resize_block(Memory_context *context, Memory_block *used_block, u64 new_size)
-// Return the resized block if success, or NULL if there isn't room in a contiguous free block; in that case the caller will have to call alloc_block and dealloc_block.
-{
-    Memory_context *c = context;
-
-    assert(in_range(c->used_blocks+1, used_block, c->used_blocks+c->used_count-1));
-
-    // Don't bother shrinking. (Maybe one day.)
-    if (new_size <= used_block->size)  return used_block;
-
-    Memory_block *next_used = used_block + 1;
-
-    u8 *end_of_used_block = used_block->data + used_block->size;
-    u64 size_avail_after  = next_used->data - end_of_used_block;
-
-    // Return NULL if there's not enough room after the block.
-    // |Todo: Maybe also check if there's room *before* the used block. If so, it would probably be
-    // better than telling the caller to reallocate. We'd have to pass the unit size to this function
-    // or just be super conservative about alignment.
-    if (used_block->size + size_avail_after < new_size)  return NULL;
-
-    // We can expand this block.
-    Memory_block *free_neighbour = find_free_block(c, size_avail_after, end_of_used_block);
-    assert(free_neighbour);
-
-    u64 extra_needed    = new_size - used_block->size;
-    u64 remaining_after = free_neighbour->size - extra_needed;
-
-    used_block->size = new_size;
-    u8 *new_end_of_used_block = used_block->data + new_size;
-
-    delete_block(c->free_blocks, &c->free_count, free_neighbour);
-
-    if (remaining_after)  add_block(c, &c->free_blocks, new_end_of_used_block, remaining_after);
-
-    assert_context_makes_sense(c);
-
-    return used_block;
-}
-
 void *alloc(s64 count, u64 unit_size, Memory_context *context)
 {
     Memory_context *c = context;
@@ -503,21 +503,6 @@ void *zero_alloc(s64 count, u64 unit_size, Memory_context *context)
     memset(data, 0, count*unit_size);
 
     return data;
-}
-
-void dealloc(void *data, Memory_context *context)
-{
-    assert(data);
-
-    if (!context) {
-        free(data);
-        return;
-    }
-
-    Memory_block *used_block = find_used_block(context, data);
-    assert(used_block);
-
-    dealloc_block(context, used_block);
 }
 
 void *resize(void *data, s64 new_limit, u64 unit_size, Memory_context *context)
@@ -564,6 +549,21 @@ void *resize(void *data, s64 new_limit, u64 unit_size, Memory_context *context)
     dealloc_block(context, used_block);
 
     return new_data;
+}
+
+void dealloc(void *data, Memory_context *context)
+{
+    assert(data);
+
+    if (!context) {
+        free(data);
+        return;
+    }
+
+    Memory_block *used_block = find_used_block(context, data);
+    assert(used_block);
+
+    dealloc_block(context, used_block);
 }
 
 Memory_context *new_context(Memory_context *parent)
