@@ -45,7 +45,7 @@ all:  bin/main$x
 all:  tags
 
 # Run targets:
-#all:  ;  bin/main$x
+all:  ;  bin/main$x
 
 #|Temporary:
 cflags += -DDEBUG

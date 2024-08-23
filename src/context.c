@@ -222,7 +222,49 @@ static void assert_context_makes_sense(Memory_context *context)
 }
 #endif // DEBUG_MEMORY_CONTEXT
 
-static Memory_block *add_free_block(Memory_context *context, void *data, u64 size)
+static bool is_sentinel(Memory_context *context, u8 *data, u64 size)
+// Return true if the given pointer and size make sense as a sentinel for the given Memory_context
+// (i.e. they would mark the start or end of one of the context's buffers).
+{
+    if (size)  return false;
+
+    for (s64 i = 0; i < context->buffer_count; i++) {
+        Memory_block *buffer = &context->buffers[i];
+        if (data == buffer->data)                 return true;
+        if (data == buffer->data + buffer->size)  return true;
+    }
+
+    return false;
+}
+
+static Memory_block *add_block(Memory_context *context, Memory_block **blocks, void *data, u64 size)
+{
+    Memory_context *c = context;
+
+    assert(blocks == &c->free_blocks || blocks == &c->used_blocks);
+
+    bool is_used = (blocks == &c->used_blocks);
+
+    assert(data);
+    assert(size || (is_used && is_sentinel(c, data, size)));
+
+    s64 *count = is_used ? &c->used_count : &c->free_count;
+    s64 *limit = is_used ? &c->used_limit : &c->free_limit;
+
+    *blocks = double_if_needed(blocks, limit, *count, sizeof(**blocks), c->parent);
+
+    s64 insert_index = is_used ? get_used_block_index(c, data) : get_free_block_index(c, size, data);
+
+    // Make room by shifting everything after block_index right one.
+    for (s64 i = *count; i > insert_index; i--)  (*blocks)[i] = (*blocks)[i-1];
+
+    (*blocks)[insert_index] = (Memory_block){.data=data, .size=size};
+    *count += 1;
+
+    return &(*blocks)[insert_index];
+}
+
+static Memory_block *add_free_block(Memory_context *context, void *data, u64 size) //|Deprecated?
 {
     Memory_context *c = context;
 
@@ -242,22 +284,12 @@ static Memory_block *add_free_block(Memory_context *context, void *data, u64 siz
     return &c->free_blocks[insert_index];
 }
 
-static Memory_block *add_used_block(Memory_context *context, u8 *data, u64 size)
+static Memory_block *add_used_block(Memory_context *context, u8 *data, u64 size) //|Deprecated?
 {
     Memory_context *c = context;
 
     assert(data);
-    if (!size) { //|Cleanup: Factor out or remove this assertion that this zero-sized used block is a sentinel?
-        bool is_sentinel = false;
-        for (s64 i = 0; i < context->buffer_count; i++) {
-            Memory_block *buffer = &context->buffers[i];
-            if (data == buffer->data || data == (buffer->data + buffer->size)) {
-                is_sentinel = true;
-                break;
-            }
-        }
-        assert(is_sentinel);
-    }
+    assert(size || is_sentinel(context, data, size));
 
     c->used_blocks = double_if_needed(c->used_blocks, &c->used_limit, c->used_count, sizeof(*c->used_blocks), c->parent);
 
@@ -389,7 +421,7 @@ static Memory_block *dealloc_block(Memory_context *context, Memory_block *used_b
     s64 used_index = used_block - c->used_blocks;
 
 #ifdef DEBUG_MEMORY_CONTEXT
-    memset(freed_data, -1, freed_size);
+    memset(freed_data, -1, freed_size);//|Temporary: Let's be more thoughtful about this.
 #endif
 
     // These asserts should always be true due to the presence of sentinels. If they are untrue
@@ -558,10 +590,10 @@ void *resize(Memory_context *context, void *data, s64 new_limit, u64 unit_size)
     // block's index might have changed and the whole array of used blocks might have moved. We need
     // to find the old used block in this case so we can deallocate it.
     used_block = &c->used_blocks[old_index];
-    if ((u8 *)data < used_block->data) {
-        do used_block -= 1;  while (data != used_block->data);
-    } else if ((u8 *)data > used_block->data || !used_block->size) {
+    if (used_block->data < (u8 *)data || !used_block->size) {
         do used_block += 1;  while (data != used_block->data || !used_block->size);
+    } else if (used_block->data > (u8 *)data) {
+        do used_block -= 1;  while (data != used_block->data);
     }
 
     u64 copy_size = Min(used_block->size, new_size);

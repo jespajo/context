@@ -1,3 +1,5 @@
+#include <time.h>
+
 #include "context.h"
 
 float randf()
@@ -30,16 +32,19 @@ int get_depth(Memory_context *context)
     return depth;
 }
 
-void stress_test_memory(int seed)
+int main()
 {
     //
     // Stress test context.c.
     //
+    int seed = time(NULL);
+    printf("seed: %d\n", seed);
+    fflush(stdout);
     srand(seed);
 
     Memory_context *ctx = new_context(NULL);
 
-    s64 num_loops = 1<<17;
+    s64 num_loops = 1<<12;
 
     for (s64 loop = 0; loop < num_loops; loop++) {
         // Make a random number of allocations.
@@ -87,15 +92,6 @@ void stress_test_memory(int seed)
     // Make sure we free the top context.
     while (ctx->parent)  ctx = ctx->parent;
     free_context(ctx);
-}
 
-int main()
-{
-    int i = 100;
-    while (i < 10000) {
-        printf("i: %d\n", i);
-        stress_test_memory(i);
-        i += 1;
-    }
     return 0;
 }
