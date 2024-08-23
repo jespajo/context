@@ -31,17 +31,17 @@ struct Memory_context {
 };
 
 void *double_if_needed(void *data, s64 *limit, s64 count, u64 unit_size, Memory_context *context);
-void *alloc(Memory_context *context, s64 count, u64 unit_size);
-void *zero_alloc(Memory_context *context, s64 count, u64 unit_size);
-void dealloc(Memory_context *context, void *data);
-void *resize(Memory_context *context, void *data, s64 new_limit, u64 unit_size);
+void *alloc(s64 count, u64 unit_size, Memory_context *context);
+void *zero_alloc(s64 count, u64 unit_size, Memory_context *context);
+void dealloc(void *data, Memory_context *context);
+void *resize(void *data, s64 new_limit, u64 unit_size, Memory_context *context);
 Memory_context *new_context(Memory_context *parent);
 void free_context(Memory_context *context);
 void reset_context(Memory_context *context);
 char *copy_string(char *source, Memory_context *context);
 
-#define New2(TYPE, CONTEXT)         (TYPE *)zero_alloc((CONTEXT), 1, sizeof(TYPE))
-#define New3(COUNT, TYPE, CONTEXT)  (TYPE *)zero_alloc((CONTEXT), (COUNT), sizeof(TYPE))
+#define New2(TYPE, CONTEXT)         (TYPE *)zero_alloc(1, sizeof(TYPE), (CONTEXT))
+#define New3(COUNT, TYPE, CONTEXT)  (TYPE *)zero_alloc((COUNT), sizeof(TYPE), (CONTEXT))
 #define New_(A, B, C, D, ...)       D
 #define New(...)                    New_(__VA_ARGS__,New3,New2)(__VA_ARGS__)
 

@@ -1,7 +1,5 @@
-Change order of alloc etc. arguments
-
 Rename alloc -> alloc_ etc. and create externally linked versions that assert they have a non-null context
 
-Cleanup assert_context_makes_sense()
+Cleanup assert_context_makes_sense() and in_range()
 
 Just have DEBUG/NDEBUG, not both

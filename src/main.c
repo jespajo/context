@@ -51,13 +51,13 @@ int main()
         while (randf() < 0.9) {
             s64   limit = rand() % 100 + 1;
             u64   unit  = rand() % 16 + 1;
-            void *data  = alloc(ctx, limit, unit);
+            void *data  = alloc(limit, unit, ctx);
         }
 
         // Maybe free something random.
         if (randf() < 0.2) {
             void *data = random_alloc(ctx);
-            if (data)  dealloc(ctx, data);
+            if (data)  dealloc(data, ctx);
         }
 
         // Maybe resize something random.
@@ -66,7 +66,7 @@ int main()
             if (data) {
                 s64   limit   = rand() % 100 + 1;
                 u64   unit    = rand() % 16 + 1;
-                void *resized = resize(ctx, data, limit, unit);
+                void *resized = resize(data, limit, unit, ctx);
             }
         }
 
