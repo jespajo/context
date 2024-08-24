@@ -1,4 +1,4 @@
-Rename alloc -> alloc_ etc. and create externally linked versions that assert they have a non-null context
+Factor out grow_blocks_array_if_full() and turn add_block() into add_buffer(), add_free_block() and add_used_block()
 
 Cleanup assert_context_makes_sense() and in_range()
 

@@ -205,75 +205,62 @@ static bool is_sentinel(Memory_context *context, u8 *data, u64 size)
     return false;
 }
 
-static void *resize_(void *data, s64 new_limit, u64 unit_size, Memory_context *context);//nocheckin
-static void *alloc_(s64 count, u64 unit_size, Memory_context *context);//nocheckin
-
-static void *double_if_needed_(void *data, s64 *limit, s64 count, u64 unit_size, Memory_context *context)
-// Make sure there's room for at least one more item in the array. If reallocation occurs, modify *limit and
-// return a pointer to the new data. Otherwise return data.
-//
-// You may ask, if this function modifies *limit, why does it rely on its caller to assign the return value
-// to data themselves? Couldn't we just make make the first parameter `void **data` and get the function to
-// modify *data as well? No. The reason is that the compiler lets us implicitly cast e.g. `int *` to `void *`,
-// but not `int **` to `void **`.
-{
-    s64 INITIAL_LIMIT = 4; // If the array is unitialised, how many units to make room for in the first allocation.
-
-    if (!data) {
-        // The array needs to be initialised.
-        assert(*limit == 0 && count == 0);
-
-        *limit = INITIAL_LIMIT;
-        data   = alloc_(*limit, unit_size, context);
-    } else if (count >= *limit) {
-        // The array needs to be resized.
-        assert(count == *limit);
-
-        // Make sure we only use this function for arrays that should increase in powers of two. This assert will trip
-        // if we use array_reserve() to reserve a non-power-of-two number of bytes for an array and then exceed this
-        // limit with Add(). In this case, just round up the array_reserve() argument to a power of two.
-        assert(is_power_of_two(*limit));
-
-        *limit *= 2;
-        data    = resize_(data, *limit, unit_size, context);
-    }
-
-    return data;
-}
-
-void *double_if_needed(void *data, s64 *limit, s64 count, u64 unit_size, Memory_context *context)
-{
-    assert(context);
-
-    return double_if_needed_(data, limit, count, unit_size, context);
-}
-
 static Memory_block *add_block(Memory_context *context, Memory_block **blocks, void *data, u64 size)
 // Add a block with the specified pointer and size to an array of Memory_blocks, maintaining the array's order.
 {
+    s64 INITIAL_LIMIT = 4; // How many buffers, used_blocks and free_blocks to make room for to begin with.
+
     Memory_context *c = context;
 
-    assert(blocks == &c->free_blocks || blocks == &c->used_blocks);
+    s64 *count, *limit, index;
+    if (blocks == &c->buffers) {
+        assert(data && size);
 
-    bool is_used = (blocks == &c->used_blocks);
+        count = &c->buffer_count;
+        limit = &c->buffer_limit;
+        index = c->buffer_count;
+    } else if (blocks == &c->free_blocks) {
+        assert(data && size);
 
-    assert(data);
-    assert(size || (is_used && is_sentinel(c, data, size)));
+        count = &c->free_count;
+        limit = &c->free_limit;
+        index = get_free_block_index(c, size, data);
+    } else if (blocks == &c->used_blocks) {
+        assert(data && (size || is_sentinel(c, data, size)));
 
-    s64 *count = is_used ? &c->used_count : &c->free_count;
-    s64 *limit = is_used ? &c->used_limit : &c->free_limit;
+        count = &c->used_count;
+        limit = &c->used_limit;
+        index = get_used_block_index(c, data);
+    } else {
+        assert(!"add_block(): The blocks argument does not belong to the context!");
+    }
 
-    *blocks = double_if_needed_(*blocks, limit, *count, sizeof(**blocks), c->parent);
+    if (*blocks == NULL) {
+        // The array of blocks needs to be allocated.
+        assert(*limit == 0 && *count == 0);
 
-    s64 insert_index = is_used ? get_used_block_index(c, data) : get_free_block_index(c, size, data);
+        *limit = INITIAL_LIMIT;
 
-    // Make room by shifting everything after block_index right one.
-    for (s64 i = *count; i > insert_index; i--)  (*blocks)[i] = (*blocks)[i-1];
+        if (c->parent)  *blocks = alloc(*limit, sizeof(Memory_block), c->parent);
+        else            *blocks = malloc(*limit * sizeof(Memory_block));
+    } else if (*count >= *limit) {
+        // The array of blocks needs to be resized.
+        assert(*count == *limit);
+        assert(is_power_of_two(*limit));
 
-    (*blocks)[insert_index] = (Memory_block){.data=data, .size=size};
+        *limit *= 2;
+
+        if (c->parent)  *blocks = resize(*blocks, *limit, sizeof(Memory_block), c->parent);
+        else            *blocks = realloc(*blocks, *limit * sizeof(Memory_block));
+    }
+
+    // Make room by shifting everything after index right one.
+    for (s64 i = *count; i > index; i--)  (*blocks)[i] = (*blocks)[i-1];
+
+    (*blocks)[index] = (Memory_block){.data=data, .size=size};
     *count += 1;
 
-    return &(*blocks)[insert_index];
+    return &(*blocks)[index];
 }
 
 static void delete_block(Memory_block *blocks, s64 *count, Memory_block *block)
@@ -308,12 +295,10 @@ static Memory_block *grow_context(Memory_context *context, u64 size)
     // Keep doubling until we know we have room for an allocation of length `size`.
     while (buffer.size < size)  buffer.size *= 2;
 
-    buffer.data = alloc_(1, buffer.size, c->parent);
+    if (c->parent)  buffer.data = alloc(1, buffer.size, c->parent);
+    else            buffer.data = malloc(buffer.size);
 
-    c->buffers = double_if_needed_(c->buffers, &c->buffer_limit, c->buffer_count, sizeof(*c->buffers), c->parent);
-
-    c->buffers[c->buffer_count] = buffer;
-    c->buffer_count += 1;
+    add_block(c, &c->buffers, buffer.data, buffer.size);
 
     // Create sentinel used blocks at the beginning and end of the buffer.
     add_block(c, &c->used_blocks, buffer.data,               0);
@@ -474,20 +459,15 @@ static Memory_block *dealloc_block(Memory_context *context, Memory_block *used_b
     return freed_block;
 }
 
-static void *alloc_(s64 count, u64 unit_size, Memory_context *context)
+void *alloc(s64 count, u64 unit_size, Memory_context *context)
 {
     Memory_context *c = context;
 
     assert(count);
     assert(unit_size);
+    assert(context);
 
     u64 size = count * unit_size;
-
-    if (!context) {
-        void *memory = malloc(size);
-        if (!memory)  Fatal("malloc failed.");
-        return memory;
-    }
 
     u64 alignment = get_alignment(unit_size);
 
@@ -506,44 +486,25 @@ static void *alloc_(s64 count, u64 unit_size, Memory_context *context)
     return alloc_block(c, free_block, size, alignment)->data;
 }
 
-void *alloc(s64 count, u64 unit_size, Memory_context *context)
+void *zero_alloc(s64 count, u64 unit_size, Memory_context *context)
 {
-    assert(context);
-
-    return alloc_(count, unit_size, context);
-}
-
-static void *zero_alloc_(s64 count, u64 unit_size, Memory_context *context)
-{
-    void *data = alloc_(count, unit_size, context);
+    void *data = alloc(count, unit_size, context);
 
     memset(data, 0, count*unit_size);
 
     return data;
 }
 
-void *zero_alloc(s64 count, u64 unit_size, Memory_context *context)
-{
-    assert(context);
-
-    return zero_alloc_(count, unit_size, context);
-}
-
-static void *resize_(void *data, s64 new_limit, u64 unit_size, Memory_context *context)
+void *resize(void *data, s64 new_limit, u64 unit_size, Memory_context *context)
 {
     Memory_context *c = context;
 
     assert(data);
     assert(new_limit);
     assert(unit_size);
+    assert(context);
 
     u64 new_size = new_limit * unit_size;
-
-    if (!context) {
-        void *new_data = realloc(data, new_size);
-        if (!new_data)  Fatal("realloc failed.");
-        return new_data;
-    }
 
     Memory_block *used_block = find_used_block(c, data);
     assert(used_block);
@@ -555,7 +516,7 @@ static void *resize_(void *data, s64 new_limit, u64 unit_size, Memory_context *c
 
     s64 old_index = used_block - c->used_blocks;
 
-    void *new_data = alloc_(new_limit, unit_size, context);
+    void *new_data = alloc(new_limit, unit_size, context);
 
     // `alloc` may have made an unknown number of allocations or reallocations. Which means the used
     // block's index might have changed and the whole array of used blocks might have moved. We need
@@ -575,21 +536,10 @@ static void *resize_(void *data, s64 new_limit, u64 unit_size, Memory_context *c
     return new_data;
 }
 
-void *resize(void *data, s64 new_limit, u64 unit_size, Memory_context *context)
-{
-    assert(context);
-
-    return resize_(data, new_limit, unit_size, context);
-}
-
-static void dealloc_(void *data, Memory_context *context)
+void dealloc(void *data, Memory_context *context)
 {
     assert(data);
-
-    if (!context) {
-        free(data);
-        return;
-    }
+    assert(context);
 
     Memory_block *used_block = find_used_block(context, data);
     assert(used_block);
@@ -597,16 +547,12 @@ static void dealloc_(void *data, Memory_context *context)
     dealloc_block(context, used_block);
 }
 
-void dealloc(void *data, Memory_context *context)
-{
-    assert(context);
-
-    return dealloc_(data, context);
-}
-
 Memory_context *new_context(Memory_context *parent)
 {
-    Memory_context *context = zero_alloc_(1, sizeof(*context), parent);
+    Memory_context *context;
+
+    if (parent)  context = New(Memory_context, parent);
+    else         context = calloc(1, sizeof(Memory_context));
 
     context->parent = parent;
 
@@ -614,20 +560,27 @@ Memory_context *new_context(Memory_context *parent)
 }
 
 void free_context(Memory_context *context)
+// This function automatically frees all child contexts because they all allocated from this parent.
 {
     Memory_context *c = context;
 
-    // This automatically frees all child contexts because they all allocated from this parent.
+    if (c->parent) {
+        for (s64 i = 0; i < c->buffer_count; i++)  dealloc(c->buffers[i].data, c->parent);
 
-    for (s64 i = 0; i < c->buffer_count; i++) {
-        if (c->buffers[i].data)  dealloc_(c->buffers[i].data, c->parent);
+        if (c->buffers)      dealloc(c->buffers,     c->parent);
+        if (c->free_blocks)  dealloc(c->free_blocks, c->parent);
+        if (c->used_blocks)  dealloc(c->used_blocks, c->parent);
+
+        dealloc(c, c->parent);
+    } else {
+        for (s64 i = 0; i < c->buffer_count; i++)  free(c->buffers[i].data);
+
+        if (c->buffers)      free(c->buffers);
+        if (c->free_blocks)  free(c->free_blocks);
+        if (c->used_blocks)  free(c->used_blocks);
+
+        free(c);
     }
-
-    if (c->buffers)      dealloc_(c->buffers,     c->parent);
-    if (c->free_blocks)  dealloc_(c->free_blocks, c->parent);
-    if (c->used_blocks)  dealloc_(c->used_blocks, c->parent);
-
-    dealloc_(c, c->parent);
 }
 
 void reset_context(Memory_context *context)
@@ -654,7 +607,7 @@ void reset_context(Memory_context *context)
 char *copy_string(char *source, Memory_context *context)
 {
     int length = strlen(source);
-    char *copy = alloc_(length+1, sizeof(char), context);
+    char *copy = alloc(length+1, sizeof(char), context);
     memcpy(copy, source, length);
     copy[length] = '\0';
     return copy;

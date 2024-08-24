@@ -37,14 +37,15 @@ int main()
     //
     // Stress test context.c.
     //
-    int seed = time(NULL);
+    //int seed = time(NULL);
+    int seed = 2;
     printf("seed: %d\n", seed);
     fflush(stdout);
     srand(seed);
 
     Memory_context *ctx = new_context(NULL);
 
-    s64 num_loops = 1<<12;
+    s64 num_loops = 1<<13;
 
     for (s64 loop = 0; loop < num_loops; loop++) {
         // Make a random number of allocations.
