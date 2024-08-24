@@ -205,35 +205,14 @@ static bool is_sentinel(Memory_context *context, u8 *data, u64 size)
     return false;
 }
 
-static Memory_block *add_block(Memory_context *context, Memory_block **blocks, void *data, u64 size)
+static Memory_block *add_block(Memory_context *context, Memory_block **blocks, s64 *count, s64 *limit, void *data, u64 size)
 // Add a block with the specified pointer and size to an array of Memory_blocks, maintaining the array's order.
 {
     s64 INITIAL_LIMIT = 4; // How many buffers, used_blocks and free_blocks to make room for to begin with.
 
     Memory_context *c = context;
 
-    s64 *count, *limit, index;
-    if (blocks == &c->buffers) {
-        assert(data && size);
-
-        count = &c->buffer_count;
-        limit = &c->buffer_limit;
-        index = c->buffer_count;
-    } else if (blocks == &c->free_blocks) {
-        assert(data && size);
-
-        count = &c->free_count;
-        limit = &c->free_limit;
-        index = get_free_block_index(c, size, data);
-    } else if (blocks == &c->used_blocks) {
-        assert(data && (size || is_sentinel(c, data, size)));
-
-        count = &c->used_count;
-        limit = &c->used_limit;
-        index = get_used_block_index(c, data);
-    } else {
-        assert(!"add_block(): The blocks argument does not belong to the context!");
-    }
+    assert(blocks == &c->buffers || blocks == &c->free_blocks || blocks == &c->used_blocks);
 
     if (*blocks == NULL) {
         // The array of blocks needs to be allocated.
@@ -254,14 +233,24 @@ static Memory_block *add_block(Memory_context *context, Memory_block **blocks, v
         else            *blocks = realloc(*blocks, *limit * sizeof(Memory_block));
     }
 
-    // Make room by shifting everything after index right one.
-    for (s64 i = *count; i > index; i--)  (*blocks)[i] = (*blocks)[i-1];
+    s64 insert_index; {
+        if (blocks == &c->free_blocks)       insert_index = get_free_block_index(c, size, data);
+        else if (blocks == &c->used_blocks)  insert_index = get_used_block_index(c, data);
+        else                                 insert_index = *count; // Buffers just get added to the end of the array.
+    }
 
-    (*blocks)[index] = (Memory_block){.data=data, .size=size};
+    // Make room by shifting everything after insert_index right one.
+    for (s64 i = *count; i > insert_index; i--)  (*blocks)[i] = (*blocks)[i-1];
+
+    (*blocks)[insert_index] = (Memory_block){.data=data, .size=size};
     *count += 1;
 
-    return &(*blocks)[index];
+    return &(*blocks)[insert_index];
 }
+
+#define add_buffer(CONTEXT, DATA, SIZE)      add_block((CONTEXT), &(CONTEXT)->buffers, &(CONTEXT)->buffer_count, &(CONTEXT)->buffer_limit, (DATA), (SIZE))
+#define add_free_block(CONTEXT, DATA, SIZE)  add_block((CONTEXT), &(CONTEXT)->free_blocks, &(CONTEXT)->free_count, &(CONTEXT)->free_limit, (DATA), (SIZE))
+#define add_used_block(CONTEXT, DATA, SIZE)  add_block((CONTEXT), &(CONTEXT)->used_blocks, &(CONTEXT)->used_count, &(CONTEXT)->used_limit, (DATA), (SIZE))
 
 static void delete_block(Memory_block *blocks, s64 *count, Memory_block *block)
 // Remove a block from an array of blocks. Decrement *count.
@@ -298,13 +287,13 @@ static Memory_block *grow_context(Memory_context *context, u64 size)
     if (c->parent)  buffer.data = alloc(1, buffer.size, c->parent);
     else            buffer.data = malloc(buffer.size);
 
-    add_block(c, &c->buffers, buffer.data, buffer.size);
+    add_buffer(c, buffer.data, buffer.size);
 
     // Create sentinel used blocks at the beginning and end of the buffer.
-    add_block(c, &c->used_blocks, buffer.data,               0);
-    add_block(c, &c->used_blocks, buffer.data + buffer.size, 0);
+    add_used_block(c, buffer.data,               0);
+    add_used_block(c, buffer.data + buffer.size, 0);
 
-    Memory_block *free_block = add_block(c, &c->free_blocks, buffer.data, buffer.size);
+    Memory_block *free_block = add_free_block(c, buffer.data, buffer.size);
 
     assert_context_makes_sense(c);
 
@@ -343,19 +332,19 @@ static Memory_block *alloc_block(Memory_context *context, Memory_block *free_blo
 
     u64 remaining = free_block->size - padding - size;
 
-    // |Speed: For now we're just going to add and delete the relevant blocks one at a time.
+    //|Speed: For now we're just going to add and delete the relevant blocks one at a time.
 
     u8 *free_data = free_block->data;
 
     delete_block(c->free_blocks, &c->free_count, free_block);
 
-    if (padding)  add_block(c, &c->free_blocks, free_data, padding);
+    if (padding)  add_free_block(c, free_data, padding);
 
-    Memory_block *used_block = add_block(c, &c->used_blocks, free_data+padding, size);
+    Memory_block *used_block = add_used_block(c, free_data+padding, size);
 
     if (remaining) {
         u8 *next_free = used_block->data + used_block->size;
-        add_block(c, &c->free_blocks, next_free, remaining);
+        add_free_block(c, next_free, remaining);
     }
 
     assert_context_makes_sense(c);
@@ -396,7 +385,7 @@ static Memory_block *resize_block(Memory_context *context, Memory_block *used_bl
 
     delete_block(c->free_blocks, &c->free_count, free_neighbour);
 
-    if (remaining_after)  add_block(c, &c->free_blocks, new_end_of_used_block, remaining_after);
+    if (remaining_after)  add_free_block(c, new_end_of_used_block, remaining_after);
 
     assert_context_makes_sense(c);
 
@@ -452,7 +441,7 @@ static Memory_block *dealloc_block(Memory_context *context, Memory_block *used_b
 
     delete_block(c->used_blocks, &c->used_count, used_block);
 
-    Memory_block *freed_block = add_block(c, &c->free_blocks, freed_data, freed_size);
+    Memory_block *freed_block = add_free_block(c, freed_data, freed_size);
 
     assert_context_makes_sense(c);
 
@@ -595,10 +584,10 @@ void reset_context(Memory_context *context)
         u64 size = c->buffers[i].size;
 
         // Add the sentinels.
-        add_block(c, &c->used_blocks, data,      0);
-        add_block(c, &c->used_blocks, data+size, 0);
+        add_used_block(c, data,      0);
+        add_used_block(c, data+size, 0);
 
-        add_block(c, &c->free_blocks, data, size);
+        add_free_block(c, data, size);
     }
 
     assert_context_makes_sense(c);

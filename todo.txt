@@ -1,10 +1,10 @@
-Factor out grow_blocks_array_if_full() and turn add_block() into add_buffer(), add_free_block() and add_used_block()
-
 Cleanup assert_context_makes_sense() and in_range()
 
 Just have DEBUG/NDEBUG, not both
 
 Add usage comment above assert() and New()
+
+Resolve |Temporary's
 
 Later:
 -----
