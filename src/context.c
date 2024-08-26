@@ -213,6 +213,7 @@ static Memory_block *add_block(Memory_context *context, Memory_block **blocks, s
     Memory_context *c = context;
 
     assert(blocks == &c->buffers || blocks == &c->free_blocks || blocks == &c->used_blocks);
+    assert(data && (size || (blocks == &c->used_blocks && is_sentinel(c, data, size))));
 
     if (*blocks == NULL) {
         // The array of blocks needs to be allocated.
@@ -368,10 +369,8 @@ static Memory_block *resize_block(Memory_context *context, Memory_block *used_bl
     u64 size_avail_after  = next_used->data - end_of_used_block;
 
     // Return NULL if there's not enough room after the block.
-    // |Todo: Maybe also check if there's room *before* the used block. If so, it would probably be
-    // better than telling the caller to reallocate. We'd have to pass the unit size to this function
-    // or just be super conservative about alignment.
     if (used_block->size + size_avail_after < new_size)  return NULL;
+    //|Todo: Maybe also check if there's room *before* the used block. If so, it would probably be better than telling the caller to reallocate. We'd have to pass the unit size to this function or just be super conservative about alignment.
 
     // We can expand this block.
     Memory_block *free_neighbour = find_free_block(c, size_avail_after, end_of_used_block);
