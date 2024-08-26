@@ -1,7 +1,5 @@
 Cleanup in_range()
 
-Add usage comment above New()
-
 Resolve |Temporary's
 
 Later:

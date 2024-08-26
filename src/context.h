@@ -37,9 +37,16 @@ void dealloc(void *data, Memory_context *context);
 Memory_context *new_context(Memory_context *parent);
 void free_context(Memory_context *context);
 void reset_context(Memory_context *context);
-char *copy_string(char *source, Memory_context *context); //|Deprecated?
 void check_context_integrity(Memory_context *context);
 
+//
+// The macro magic below sets up the New() macro so that the first argument is optional.
+// This optional argument is a count specifier. If left out, it defaults to one.
+//
+//     int *numbers = New(100, int, context);    // Allocate 100 contiguous ints.
+//
+//     Vector3 *vector = New(Vector3, context);  // Allocate one Vector3.
+//
 #define New2(TYPE, CONTEXT)         (TYPE *)zero_alloc(1, sizeof(TYPE), (CONTEXT))
 #define New3(COUNT, TYPE, CONTEXT)  (TYPE *)zero_alloc((COUNT), sizeof(TYPE), (CONTEXT))
 #define New_(A, B, C, D, ...)       D

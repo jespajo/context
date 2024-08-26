@@ -485,15 +485,6 @@ void reset_context(Memory_context *context)
     }
 }
 
-char *copy_string(char *source, Memory_context *context)
-{
-    int length = strlen(source);
-    char *copy = alloc(length+1, sizeof(char), context);
-    memcpy(copy, source, length);
-    copy[length] = '\0';
-    return copy;
-}
-
 // We expose check_context_integrity() for testing purposes. Since that function works by making
 // lots of assertions, we hide it behind this #ifndef, so we don't accidentally link a non-debug
 // object file and think we're calling a useful function but it's just a husk.
