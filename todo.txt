@@ -1,15 +1,9 @@
-Cleanup in_range()
+Port the Array stuff
 
-Resolve |Temporary's
+Write a bunch of tests for the Array stuff
 
-Later:
------
-    Port the Array stuff
+Port the Map stuff
 
-    Write a bunch of tests for the Array stuff
+Write tests for Maps
 
-    Port the Map stuff
-
-    Write tests for Maps
-
-    Map v2!
+Map v2!

@@ -251,7 +251,8 @@ static Memory_block *alloc_block(Memory_context *context, Memory_block *free_blo
 }
 
 static Memory_block *resize_block(Memory_context *context, Memory_block *used_block, u64 new_size)
-// Return the resized block if success, or NULL if there isn't room in a contiguous free block; in that case the caller will have to call alloc_block and dealloc_block.
+// Return the resized block if success, or NULL if there isn't room in a contiguous free block; in that case
+// the caller will have to call alloc_block and dealloc_block.
 {
     Memory_context *c = context;
 
@@ -478,7 +479,7 @@ void reset_context(Memory_context *context)
 
 // We expose check_context_integrity() for testing purposes. Since that function works by making
 // lots of assertions, we hide it behind this #ifndef, so we don't accidentally link a non-debug
-// object file and think we're calling a useful function but it's just a husk.
+// object file and think we're calling a useful function that's actually just a husk.
 #ifndef NDEBUG
 static bool are_in_free_order(Memory_block *blocks, s64 count)
 {
