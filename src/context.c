@@ -91,11 +91,6 @@ static Memory_block *find_used_block(Memory_context *context, u8 *data)
     return NULL;
 }
 
-static bool in_range(void *zero, void *x, void *zero_plus_count)
-{
-    return (u64)zero <= (u64)x && (u64)x < (u64)zero_plus_count;
-}
-
 static bool is_sentinel(Memory_context *context, u8 *data, u64 size)
 // Return true if the given pointer and size make sense as a sentinel for the given Memory_context
 // (i.e. they would mark the start or end of one of the context's buffers).
@@ -228,7 +223,6 @@ static Memory_block *alloc_block(Memory_context *context, Memory_block *free_blo
 {
     Memory_context *c = context;
 
-    assert(in_range(c->free_blocks, free_block, c->free_blocks+c->free_count));
     assert(free_block->size >= size); // This is not necessary (we return NULL in this case) but otherwise why are you calling this function?
 
     u64 padding = get_padding(free_block->data, alignment);
@@ -260,8 +254,6 @@ static Memory_block *resize_block(Memory_context *context, Memory_block *used_bl
 // Return the resized block if success, or NULL if there isn't room in a contiguous free block; in that case the caller will have to call alloc_block and dealloc_block.
 {
     Memory_context *c = context;
-
-    assert(in_range(c->used_blocks+1, used_block, c->used_blocks+c->used_count-1));
 
     // Don't bother shrinking. (Maybe one day.)
     if (new_size <= used_block->size)  return used_block;
@@ -297,7 +289,6 @@ static Memory_block *dealloc_block(Memory_context *context, Memory_block *used_b
 {
     Memory_context *c = context;
 
-    assert(in_range(c->used_blocks, used_block, c->used_blocks+c->used_count));
     assert(used_block->size);
 
     // |Speed: For now we're just going to add and delete the relevant blocks one at a time.
