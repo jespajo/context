@@ -34,23 +34,21 @@ void log_error_(char *file, int line, char *format, ...);
 
 #define log_error(...)  log_error_(__FILE__, __LINE__, __VA_ARGS__)
 
-#ifdef DEBUG
+// Our assert is the pretty much the same as the standard C one, i.e. it will be removed during compilation if NDEBUG is defined.
+#ifndef NDEBUG
   #if OS == LINUX
     #define Breakpoint()  __builtin_trap()
   #elif OS == WINDOWS
     #define Breakpoint()  __debugbreak()
   #endif
-#else
-  #define Breakpoint()  ((void)0)
-#endif
 
-#ifdef NDEBUG
-  #define assert(...)   ((void)0)
-#else
   #define assert(COND) \
                ((COND) ? (void)0 \
                        : (log_error("Assertion failed: %s.", #COND), \
                           Breakpoint()))
+#else
+  #define Breakpoint()  ((void)0)
+  #define assert(...)   ((void)0)
 #endif
 
 #define Fatal(...)  (log_error("Fatal error: " __VA_ARGS__), Breakpoint(), exit(1))

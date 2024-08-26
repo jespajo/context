@@ -1,8 +1,6 @@
-Cleanup assert_context_makes_sense() and in_range()
+Cleanup in_range()
 
-Just have DEBUG/NDEBUG, not both
-
-Add usage comment above assert() and New()
+Add usage comment above New()
 
 Resolve |Temporary's
 

@@ -91,99 +91,6 @@ static Memory_block *find_used_block(Memory_context *context, u8 *data)
     return NULL;
 }
 
-#ifndef DEBUG_MEMORY_CONTEXT
-#define assert_context_makes_sense(C)  ((void)0)
-#else
-static bool are_in_free_order(Memory_block *blocks, s64 count)
-{
-    for (s64 i = 0; i < count-1; i++) {
-        if (blocks[i].size > blocks[i+1].size)   return false;
-
-        if (blocks[i].size == blocks[i+1].size) {
-            if (blocks[i].data > blocks[i+1].data)  return false;
-        }
-    }
-    return true;
-}
-
-static bool are_in_used_order(Memory_block *blocks, s64 count)
-{
-    for (s64 i = 0; i < count-1; i++) {
-        if (blocks[i].data > blocks[i+1].data)  return false;
-
-        if (blocks[i].data == blocks[i+1].data) {
-            if (blocks[i].size)  return false;
-        }
-    }
-    return true;
-}
-
-static void assert_context_makes_sense(Memory_context *context)
-{
-    Memory_context *c = context;
-
-    assert(are_in_free_order(c->free_blocks, c->free_count));
-    assert(are_in_used_order(c->used_blocks, c->used_count));
-
-    s64 num_free = 0;
-    s64 num_used = 0;
-
-    // For each buffer, enumerate all blocks to make sure they look right.
-    for (s64 buffer_index = 0; buffer_index < c->buffer_count; buffer_index++) {
-        Memory_block *buffer = &c->buffers[buffer_index];
-        u8 *buffer_end = buffer->data + buffer->size;
-
-        u8 *data = buffer->data;
-
-        Memory_block *last_used; {
-            s64 index = get_used_block_index(c, data);
-            last_used = &c->used_blocks[index-1];
-        }
-        assert(last_used->data == buffer->data);
-        assert(last_used->size == 0);
-
-        num_used += 1;
-
-        while (data < buffer_end) {
-            Memory_block *used_block = find_used_block(c, data);
-            if (used_block) {
-                assert(used_block->size);
-
-                data     += used_block->size;
-                num_used += 1;
-                last_used = used_block;
-            } else {
-                s64 last_used_index = last_used - c->used_blocks;
-                assert(last_used_index < c->used_count-1);
-
-                u8 *next_data = (last_used+1)->data;
-                assert(next_data <= buffer_end);
-
-                s64 free_size = next_data - data;
-                Memory_block *free_block = find_free_block(c, free_size, data);
-                assert(free_block);
-
-                data     += free_block->size;
-                num_free += 1;
-            }
-        }
-
-        assert(data == buffer_end);
-
-        last_used += 1;
-        assert(last_used - c->used_blocks < c->used_count);
-
-        assert(last_used->data == buffer_end);
-        assert(last_used->size == 0);
-
-        num_used += 1;
-    }
-
-    assert(num_free == c->free_count);
-    assert(num_used == c->used_count);
-}
-#endif // DEBUG_MEMORY_CONTEXT
-
 static bool in_range(void *zero, void *x, void *zero_plus_count)
 {
     return (u64)zero <= (u64)x && (u64)x < (u64)zero_plus_count;
@@ -296,8 +203,6 @@ static Memory_block *grow_context(Memory_context *context, u64 size)
 
     Memory_block *free_block = add_free_block(c, buffer.data, buffer.size);
 
-    assert_context_makes_sense(c);
-
     return free_block;
 }
 
@@ -348,8 +253,6 @@ static Memory_block *alloc_block(Memory_context *context, Memory_block *free_blo
         add_free_block(c, next_free, remaining);
     }
 
-    assert_context_makes_sense(c);
-
     return used_block;
 }
 
@@ -386,8 +289,6 @@ static Memory_block *resize_block(Memory_context *context, Memory_block *used_bl
 
     if (remaining_after)  add_free_block(c, new_end_of_used_block, remaining_after);
 
-    assert_context_makes_sense(c);
-
     return used_block;
 }
 
@@ -404,10 +305,6 @@ static Memory_block *dealloc_block(Memory_context *context, Memory_block *used_b
     u8 *freed_data = used_block->data;
     u64 freed_size = used_block->size;
     s64 used_index = used_block - c->used_blocks;
-
-#ifdef DEBUG_MEMORY_CONTEXT
-    memset(freed_data, -1, freed_size);//|Temporary: Let's be more thoughtful about this.
-#endif
 
     // These asserts should always be true due to the presence of sentinels. If they are untrue
     // the pointer arithmetic used below to check the neighbouring used blocks is invalid.
@@ -441,8 +338,6 @@ static Memory_block *dealloc_block(Memory_context *context, Memory_block *used_b
     delete_block(c->used_blocks, &c->used_count, used_block);
 
     Memory_block *freed_block = add_free_block(c, freed_data, freed_size);
-
-    assert_context_makes_sense(c);
 
     return freed_block;
 }
@@ -588,8 +483,6 @@ void reset_context(Memory_context *context)
 
         add_free_block(c, data, size);
     }
-
-    assert_context_makes_sense(c);
 }
 
 char *copy_string(char *source, Memory_context *context)
@@ -600,3 +493,97 @@ char *copy_string(char *source, Memory_context *context)
     copy[length] = '\0';
     return copy;
 }
+
+// We expose check_context_integrity() for testing purposes. Since that function works by making
+// lots of assertions, we hide it behind this #ifndef, so we don't accidentally link a non-debug
+// object file and think we're calling a useful function but it's just a husk.
+#ifndef NDEBUG
+static bool are_in_free_order(Memory_block *blocks, s64 count)
+{
+    for (s64 i = 0; i < count-1; i++) {
+        if (blocks[i].size > blocks[i+1].size)   return false;
+
+        if (blocks[i].size == blocks[i+1].size) {
+            if (blocks[i].data > blocks[i+1].data)  return false;
+        }
+    }
+    return true;
+}
+
+static bool are_in_used_order(Memory_block *blocks, s64 count)
+{
+    for (s64 i = 0; i < count-1; i++) {
+        if (blocks[i].data > blocks[i+1].data)  return false;
+
+        if (blocks[i].data == blocks[i+1].data) {
+            if (blocks[i].size)  return false;
+        }
+    }
+    return true;
+}
+
+void check_context_integrity(Memory_context *context)
+{
+    Memory_context *c = context;
+
+    assert(are_in_free_order(c->free_blocks, c->free_count));
+    assert(are_in_used_order(c->used_blocks, c->used_count));
+
+    s64 num_free = 0;
+    s64 num_used = 0;
+
+    // For each buffer, enumerate all blocks to make sure they look right.
+    for (s64 buffer_index = 0; buffer_index < c->buffer_count; buffer_index++) {
+        Memory_block *buffer = &c->buffers[buffer_index];
+        u8 *buffer_end = buffer->data + buffer->size;
+
+        u8 *data = buffer->data;
+
+        Memory_block *last_used; {
+            s64 index = get_used_block_index(c, data);
+            last_used = &c->used_blocks[index-1];
+        }
+        assert(last_used->data == buffer->data);
+        assert(last_used->size == 0);
+
+        num_used += 1;
+
+        while (data < buffer_end) {
+            Memory_block *used_block = find_used_block(c, data);
+            if (used_block) {
+                assert(used_block->size);
+
+                data     += used_block->size;
+                num_used += 1;
+                last_used = used_block;
+            } else {
+                s64 last_used_index = last_used - c->used_blocks;
+                assert(last_used_index < c->used_count-1);
+
+                u8 *next_data = (last_used+1)->data;
+                assert(next_data <= buffer_end);
+
+                s64 free_size = next_data - data;
+                Memory_block *free_block = find_free_block(c, free_size, data);
+                assert(free_block);
+
+                data     += free_block->size;
+                num_free += 1;
+            }
+        }
+
+        assert(data == buffer_end);
+
+        last_used += 1;
+        assert(last_used - c->used_blocks < c->used_count);
+
+        assert(last_used->data == buffer_end);
+        assert(last_used->size == 0);
+
+        num_used += 1;
+    }
+
+    assert(num_free == c->free_count);
+    assert(num_used == c->used_count);
+}
+#endif // NDEBUG

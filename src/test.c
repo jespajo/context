@@ -53,12 +53,18 @@ int main()
             s64   limit = rand() % 100 + 1;
             u64   unit  = rand() % 16 + 1;
             void *data  = alloc(limit, unit, ctx);
+
+            memset(data, -1, limit*unit);
+
+            check_context_integrity(ctx);
         }
 
         // Maybe free something random.
         if (randf() < 0.2) {
             void *data = random_alloc(ctx);
             if (data)  dealloc(data, ctx);
+
+            check_context_integrity(ctx);
         }
 
         // Maybe resize something random.
@@ -68,6 +74,10 @@ int main()
                 s64   limit   = rand() % 100 + 1;
                 u64   unit    = rand() % 16 + 1;
                 void *resized = resize(data, limit, unit, ctx);
+
+                memset(resized, -3, limit*unit);
+
+                check_context_integrity(ctx);
             }
         }
 
@@ -76,7 +86,12 @@ int main()
             Memory_context *parent = ctx->parent;
             if (parent) {
                 // Maybe also free the child context.
-                if (randf() < 0.02)  free_context(ctx);
+                if (randf() < 0.02) {
+                    for (s64 i = 0; i < ctx->buffer_count; i++) {
+                        memset(ctx->buffers[i].data, -4, ctx->buffers[i].size);
+                    }
+                    free_context(ctx);
+                }
                 ctx = parent;
             }
         }

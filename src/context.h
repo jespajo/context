@@ -30,15 +30,15 @@ struct Memory_context {
     s64             used_limit;
 };
 
-void *double_if_needed(void *data, s64 *limit, s64 count, u64 unit_size, Memory_context *context);
 void *alloc(s64 count, u64 unit_size, Memory_context *context);
 void *zero_alloc(s64 count, u64 unit_size, Memory_context *context);
-void dealloc(void *data, Memory_context *context);
 void *resize(void *data, s64 new_limit, u64 unit_size, Memory_context *context);
+void dealloc(void *data, Memory_context *context);
 Memory_context *new_context(Memory_context *parent);
 void free_context(Memory_context *context);
 void reset_context(Memory_context *context);
-char *copy_string(char *source, Memory_context *context);
+char *copy_string(char *source, Memory_context *context); //|Deprecated?
+void check_context_integrity(Memory_context *context);
 
 #define New2(TYPE, CONTEXT)         (TYPE *)zero_alloc(1, sizeof(TYPE), (CONTEXT))
 #define New3(COUNT, TYPE, CONTEXT)  (TYPE *)zero_alloc((COUNT), sizeof(TYPE), (CONTEXT))

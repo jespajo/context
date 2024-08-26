@@ -27,6 +27,7 @@ else
     cflags += -std=c99
     cflags += -g3
     cflags += -O2
+    #cflags += -DNDEBUG
     cflags += -MMD -MP
     cflags += -MT bin/$*.o -MT bin/$*.obj # Yucky! We tell the compiler on Linux to output dependency-tracking info for both Linux and Windows.
     cflags += -o $@
@@ -34,10 +35,6 @@ else
     lflags += -o $@
 endif
 
-#|Temporary:
-cflags += -DDEBUG
-cflags += -DDEBUG_MEMORY_CONTEXT
-cflags += $(fsan)
 ifeq ($(cc),gcc)
   cflags += -Wno-missing-braces
 endif
