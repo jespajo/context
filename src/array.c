@@ -6,8 +6,8 @@
 #include "array.h"
 
 void *maybe_grow_array(void *data, s64 *limit, s64 count, u64 unit_size, Memory_context *context)
-// Make sure there's room for at least one more item in the array. If reallocation occurs, modify *limit and
-// return a pointer to the new data. Otherwise return data.
+// If the array doesn't exist yet, create it. If it exists and it's full, double its size. In either case,
+// modify *limit and return a pointer to the new data. Otherwise just return data.
 //
 // You may ask, if this function modifies *limit, why does it rely on its caller to assign the return value
 // to data themselves? Couldn't we just make make the first parameter `void **data` and get the function to
@@ -15,8 +15,6 @@ void *maybe_grow_array(void *data, s64 *limit, s64 count, u64 unit_size, Memory_
 // but not `int **` to `void **`.
 {
     s64 INITIAL_LIMIT = 4; // If the array is unitialised, how many units to make room for in the first allocation.
-
-    assert(context);
 
     if (!data) {
         // The array needs to be initialised.
