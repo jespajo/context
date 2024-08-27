@@ -1,6 +1,4 @@
-// Move documentation from new_map() to header file.
-
-#include <string.h>
+//|Todo: Move documentation from new_map() to header file.
 
 #include "map.h"
 
@@ -92,7 +90,7 @@ u64 hash_bytes(void *p, u64 size)
 }
 
 u64 hash_string(char *string)
-// Thomas Wang's mix function. Also won't return zero.
+// Thomas Wang's mix function, via Sean Barrett. Also won't return zero.
 {
     u64 seed = hash_seed;
     u64 hash = seed;
@@ -141,7 +139,7 @@ void *new_map(Memory_context *context, u64 key_size, u64 val_size, bool string_m
     map->vals += val_size;
 
     map->num_buckets = INITIAL_NUM_BUCKETS;
-    map->buckets     = New(INITIAL_NUM_BUCKETS, Hash_Bucket, context);
+    map->buckets     = New(INITIAL_NUM_BUCKETS, Hash_bucket, context);
 
     return map;
 }
@@ -166,7 +164,7 @@ static void grow_map_if_needed(void *map)
 
     if (m->count >= m->num_buckets/4*3) {
         // More than 3/4 of the buckets are used.
-        Hash_Bucket *new_buckets = New(2*m->num_buckets, Hash_Bucket, m->context);
+        Hash_bucket *new_buckets = New(2*m->num_buckets, Hash_bucket, m->context);
 
         for (s64 old_i = 0; old_i < m->num_buckets; old_i++) {
             if (!m->buckets[old_i].hash)  continue;
@@ -314,7 +312,7 @@ bool delete_key(void *map)
     {
         s64 i = bucket_index;
         while (true) {
-            m->buckets[i] = (Hash_Bucket){0};
+            m->buckets[i] = (Hash_bucket){0};
 
             s64 j = i;
             while (true) {

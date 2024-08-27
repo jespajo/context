@@ -9,11 +9,11 @@
 
 #include "context.h"
 
-struct Hash_Bucket {
+struct Hash_bucket {
     u64 hash;
     s64 index;
 };
-typedef struct Hash_Bucket Hash_Bucket;
+typedef struct Hash_bucket Hash_bucket;
 
 #define Map(KEY_TYPE, VAL_TYPE)    \
     struct {                       \
@@ -22,7 +22,7 @@ typedef struct Hash_Bucket Hash_Bucket;
         s64        count;          \
         s64        limit;          \
                                    \
-        Hash_Bucket *buckets;      \
+        Hash_bucket *buckets;      \
         s64          num_buckets;  \
                                    \
         Memory_context *context;   \
