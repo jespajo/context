@@ -37,8 +37,6 @@ typedef struct Hash_bucket Hash_bucket;
 
 typedef Dict(char *)  string_dict;
 
-u64 hash_bytes(void *p, u64 size);
-u64 hash_string(char *string);
 void *new_map(Memory_context *context, u64 key_size, u64 val_size, bool string_mode);
 s64 set_key(void *map);
 s64 get_bucket_index(void *map);
