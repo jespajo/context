@@ -1,7 +1,7 @@
 //|Todo: Move documentation from new_map() to header file.
 
 #include "map.h"
-#include "hash.h"
+#include "hash.h" //|Temporary
 
 typedef Map(char, char) Alias_map;
 
@@ -67,14 +67,11 @@ static void grow_map_if_needed(void *map)
             if (!m->buckets[old_i].hash)  continue;
 
             s64 new_i = m->buckets[old_i].hash % (2*m->num_buckets);
-            while (true) {
-                if (!new_buckets[new_i].hash) {
-                    new_buckets[new_i] = m->buckets[old_i];
-                    break;
-                }
+            while (new_buckets[new_i].hash) {
                 new_i -= 1;
                 if (new_i < 0)  new_i += 2*m->num_buckets;
             }
+            new_buckets[new_i] = m->buckets[old_i];
         }
         dealloc(m->buckets, m->context);
         m->buckets = new_buckets;
@@ -171,7 +168,7 @@ s64 get_bucket_index(void *map)
                 if (!strcmp(key, ((char **)m->keys)[kv_index]))  return bucket_index;
             }
             bucket_index -= 1;
-            if (bucket_index < 0)  bucket_index = m->num_buckets-1; // |Cleanup: += for consistency?
+            if (bucket_index < 0)  bucket_index += m->num_buckets;
         }
     } else {
         // The key is binary.
@@ -187,8 +184,7 @@ s64 get_bucket_index(void *map)
                 if (!memcmp(key, (char *)m->keys + kv_index*m->key_size, m->key_size))  return bucket_index;
             }
             bucket_index -= 1;
-            if (bucket_index < 0)  bucket_index = m->num_buckets-1; // |Cleanup: += for consistency?
-
+            if (bucket_index < 0)  bucket_index += m->num_buckets;
         }
     }
 }
