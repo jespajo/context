@@ -1,6 +1,6 @@
-//|Todo: Some kind of visualisation would be really helpful.
+// |Todo: Some kind of visualisation would be really helpful.
 
-//|Speed: At the moment we frequently operate on the arrays of blocks by deleting a block with delete_block() and then adding
+// |Speed: At the moment we frequently operate on the arrays of blocks by deleting a block with delete_block() and then adding
 // blocks with add_block(). Each of these functions leaves the array sorted, so if we delete the first block in the array, it
 // will shift all subsequent blocks to the left, and if we then insert a new block at the start of the array, it will shift
 // everything back to the right. There is room for improvement here. Solving this may involve some kind of transaction-based
@@ -108,7 +108,7 @@ static bool is_sentinel(Memory_context *context, u8 *data, u64 size)
 }
 
 static Memory_block *add_block(Memory_context *context, Memory_block **blocks, s64 *count, s64 *limit, void *data, u64 size)
-// Add a block with the specified pointer and size to an array of Memory_blocks, maintaining the array's order.
+// Add a block with the specified data pointer and size to an array of Memory_blocks, maintaining the array's order.
 {
     s64 INITIAL_LIMIT = 4; // How many buffers, used_blocks and free_blocks to make room for to begin with.
 
@@ -232,7 +232,7 @@ static Memory_block *alloc_block(Memory_context *context, Memory_block *free_blo
 
     u64 remaining = free_block->size - padding - size;
 
-    //|Speed: For now we're just going to add and delete the relevant blocks one at a time.
+    // |Speed: For now we're just going to add and delete the relevant blocks one at a time.
 
     u8 *free_data = free_block->data;
 
@@ -266,7 +266,9 @@ static Memory_block *resize_block(Memory_context *context, Memory_block *used_bl
 
     // Return NULL if there's not enough room after the block.
     if (used_block->size + size_avail_after < new_size)  return NULL;
-    //|Todo: Maybe also check if there's room *before* the used block. If so, it would probably be better than telling the caller to reallocate. We'd have to pass the unit size to this function or just be super conservative about alignment.
+    // |Todo: Maybe also check if there's room *before* the used block. If so, it would probably be better
+    // than telling the caller to reallocate. We'd have to pass the unit size to this function or just be
+    // super conservative about alignment.
 
     // We can expand this block.
     Memory_block *free_neighbour = find_free_block(c, size_avail_after, end_of_used_block);
@@ -342,8 +344,7 @@ void *alloc(s64 count, u64 unit_size, Memory_context *context)
     assert(unit_size);
     assert(context);
 
-    u64 size = count * unit_size;
-
+    u64 size      = count * unit_size;
     u64 alignment = get_alignment(unit_size);
 
     // See if there's an already-free block of the right size.
@@ -477,9 +478,11 @@ void reset_context(Memory_context *context)
     }
 }
 
+//
 // We expose check_context_integrity() for testing purposes. Since that function works by making
 // lots of assertions, we hide it behind this #ifndef, so we don't accidentally link a non-debug
 // object file and think we're calling a useful function that's actually just a husk.
+//
 #ifndef NDEBUG
 static bool are_in_free_order(Memory_block *blocks, s64 count)
 {
