@@ -1,6 +1,6 @@
 #include <time.h>
 
-#include "map.h"
+#include "../map.h"
 
 float randf()
 {

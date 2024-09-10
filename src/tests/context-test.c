@@ -1,6 +1,6 @@
 #include <time.h>
 
-#include "context.h"
+#include "../context.h"
 
 float randf()
 {
