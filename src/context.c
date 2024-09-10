@@ -172,7 +172,7 @@ static void delete_block(Memory_block *blocks, s64 *count, Memory_block *block)
 static Memory_block *grow_context(Memory_context *context, u64 size)
 // Add a new buffer of at least size bytes to a context. Return the associated free block.
 {
-    u64 FIRST_BUFFER_SIZE = 8192;
+    u64 FIRST_BUFFER_SIZE = BUFSIZ;
 
     Memory_context *c = context;
 
