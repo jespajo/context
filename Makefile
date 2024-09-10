@@ -20,7 +20,8 @@ else
     x :=
     find := find
 
-    cc := clang
+    cc := gcc
+    #cc := clang # Also works
 
     cflags += -Wall -Werror
     cflags += -Wno-unused
