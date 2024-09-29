@@ -172,7 +172,6 @@ static char *copy_string(char *source, Memory_context *context)
     return copy;
 }
 
-//|Cleanup: Most of these args are unnecessary!!
 s64 set_key(void *keys, s64 *count, u64 key_size, Hash_bucket *buckets, s64 num_buckets, Memory_context *context, bool string_mode)
 // Assume the key to set is stored in map->keys[-1]. Add the key to the map's hash table if it
 // wasn't already there and return the key's index in the map->keys array.
