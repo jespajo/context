@@ -45,6 +45,7 @@ typedef Dict(char *)       string_dict;
 
 u64 hash_bytes(void *p, u64 size);
 u64 hash_string(char *string);
+bool init_map_if_needed(void **keys, void **vals, s64 *count, s64 *limit, u64 key_size, u64 val_size, Hash_bucket **buckets, s64 *num_buckets, Memory_context *context);
 void grow_map_if_needed(void **keys, void **vals, s64 *count, s64 *limit, u64 key_size, u64 val_size, Hash_bucket **buckets, s64 *num_buckets, Memory_context *context);
 s64 set_key(void *keys, s64 *count, u64 key_size, Hash_bucket *buckets, s64 num_buckets, Memory_context *context, bool string_mode);
 s64 get_bucket_index(void *keys, u64 key_size, Hash_bucket *buckets, s64 num_buckets, bool string_mode);
@@ -68,22 +69,22 @@ bool delete_key(void *keys, void *vals, s64 *count, u64 key_size, u64 val_size, 
      &(MAP)->vals[(MAP)->i])
 
 #define Get(MAP, KEY) \
-    (grow_map_if_needed((void**)&(MAP)->keys, (void**)&(MAP)->vals, &(MAP)->count, &(MAP)->limit, sizeof(*(MAP)->keys), sizeof(*(MAP)->vals), &(MAP)->buckets, &(MAP)->num_buckets, (MAP)->context), \
+    (init_map_if_needed((void**)&(MAP)->keys, (void**)&(MAP)->vals, &(MAP)->count, &(MAP)->limit, sizeof(*(MAP)->keys), sizeof(*(MAP)->vals), &(MAP)->buckets, &(MAP)->num_buckets, (MAP)->context), \
      (MAP)->keys[-1] = (KEY), \
      (MAP)->i = get_bucket_index((MAP)->keys, sizeof(*(MAP)->keys), (MAP)->buckets, (MAP)->num_buckets, (MAP)->string_mode), \
      &(MAP)->vals[(MAP)->i < 0 ? -1 : (MAP)->buckets[(MAP)->i].index])
 
 #define Delete(MAP, KEY) \
-    (grow_map_if_needed((void**)&(MAP)->keys, (void**)&(MAP)->vals, &(MAP)->count, &(MAP)->limit, sizeof(*(MAP)->keys), sizeof(*(MAP)->vals), &(MAP)->buckets, &(MAP)->num_buckets, (MAP)->context), \
+    (init_map_if_needed((void**)&(MAP)->keys, (void**)&(MAP)->vals, &(MAP)->count, &(MAP)->limit, sizeof(*(MAP)->keys), sizeof(*(MAP)->vals), &(MAP)->buckets, &(MAP)->num_buckets, (MAP)->context), \
      (MAP)->keys[-1] = (KEY), \
      delete_key((MAP)->keys, (MAP)->vals, &(MAP)->count, sizeof(*(MAP)->keys), sizeof(*(MAP)->vals), (MAP)->buckets, (MAP)->num_buckets, (MAP)->context, (MAP)->string_mode))
 
 #define SetDefault(MAP, VALUE) \
-    (grow_map_if_needed((void**)&(MAP)->keys, (void**)&(MAP)->vals, &(MAP)->count, &(MAP)->limit, sizeof(*(MAP)->keys), sizeof(*(MAP)->vals), &(MAP)->buckets, &(MAP)->num_buckets, (MAP)->context), \
+    (init_map_if_needed((void**)&(MAP)->keys, (void**)&(MAP)->vals, &(MAP)->count, &(MAP)->limit, sizeof(*(MAP)->keys), sizeof(*(MAP)->vals), &(MAP)->buckets, &(MAP)->num_buckets, (MAP)->context), \
      (MAP)->vals[-1] = (VALUE))
 
 #define IsSet(MAP, KEY) \
-    (grow_map_if_needed((void**)&(MAP)->keys, (void**)&(MAP)->vals, &(MAP)->count, &(MAP)->limit, sizeof(*(MAP)->keys), sizeof(*(MAP)->vals), &(MAP)->buckets, &(MAP)->num_buckets, (MAP)->context), \
+    (init_map_if_needed((void**)&(MAP)->keys, (void**)&(MAP)->vals, &(MAP)->count, &(MAP)->limit, sizeof(*(MAP)->keys), sizeof(*(MAP)->vals), &(MAP)->buckets, &(MAP)->num_buckets, (MAP)->context), \
      (MAP)->keys[-1] = (KEY), \
      get_bucket_index((MAP)->keys, sizeof(*(MAP)->keys), (MAP)->buckets, (MAP)->num_buckets, (MAP)->string_mode) >= 0)
 

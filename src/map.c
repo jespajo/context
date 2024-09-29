@@ -104,32 +104,40 @@ u64 hash_string(char *string)
     return (hash) ? hash : 1;
 }
 
+bool init_map_if_needed(void **keys, void **vals, s64 *count, s64 *limit, u64 key_size, u64 val_size, Hash_bucket **buckets, s64 *num_buckets, Memory_context *context)
+// Return true if the map needed initting.
+{
+    if (*keys)  return false;
+
+    // Initialise the map.
+    s64 INITIAL_KV_LIMIT    = 8; // Limit on key/value pairs. Includes the first one which is reserved, accessed as keys[-1] and vals[-1].
+    s64 INITIAL_NUM_BUCKETS = 8;
+
+    *limit = INITIAL_KV_LIMIT;
+    *keys  = alloc(*limit, key_size, context); //|Speed: We should allocate the keys and vals arrays together, always. The only minor annoyance is making sure the vals are properly aligned.
+    *vals  = alloc(*limit, val_size, context); //|
+
+    // Reserve the first key/value pair. keys[-1] will be used as temporary storage for a key we're operating on with Get(), Set() or Delete().
+    // vals[-1] will store the default value for *Get() to return if the requested key is not present.
+    //
+    // This means that when you use *Get() with an incorrect key, the result is a zeroed-out value of the same type as map's values.
+    // We rely on this behaviour in application code. Use SetDefault() to change the default value returned on a per-map basis.
+    // The default default will always be the zeroed-out value.
+    memset(*vals, 0, val_size);
+    *keys = (u8 *)*keys + key_size;
+    *vals = (u8 *)*vals + val_size;
+
+    *num_buckets = INITIAL_NUM_BUCKETS;
+    *buckets     = New(*num_buckets, Hash_bucket, context);
+
+    return true;
+}
+
 void grow_map_if_needed(void **keys, void **vals, s64 *count, s64 *limit, u64 key_size, u64 val_size, Hash_bucket **buckets, s64 *num_buckets, Memory_context *context)
 {
-    if (*keys == NULL) {
-        // Initialise the map.
-        s64 INITIAL_KV_LIMIT    = 8; // Limit on key/value pairs. Includes the first one which is reserved, accessed as keys[-1] and vals[-1].
-        s64 INITIAL_NUM_BUCKETS = 8;
+    bool is_new_map = init_map_if_needed(keys, vals, count, limit, key_size, val_size, buckets, num_buckets, context);
 
-        *limit = INITIAL_KV_LIMIT;
-        *keys  = alloc(*limit, key_size, context); //|Speed: We should allocate the keys and vals arrays together, always. The only minor annoyance is making sure the vals are properly aligned.
-        *vals  = alloc(*limit, val_size, context); //|
-
-        // Reserve the first key/value pair. keys[-1] will be used as temporary storage for a key we're operating on with Get(), Set() or Delete().
-        // vals[-1] will store the default value for *Get() to return if the requested key is not present.
-        //
-        // This means that when you use *Get() with an incorrect key, the result is a zeroed-out value of the same type as map's values.
-        // We rely on this behaviour in application code. Use SetDefault() to change the default value returned on a per-map basis.
-        // The default default will always be the zeroed-out value.
-        memset(*vals, 0, val_size);
-        *keys = (u8 *)*keys + key_size;
-        *vals = (u8 *)*vals + val_size;
-
-        *num_buckets = INITIAL_NUM_BUCKETS;
-        *buckets     = New(*num_buckets, Hash_bucket, context);
-
-        return;
-    }
+    if (is_new_map)  return;
 
     if (*count >= *limit-1) {
         // We're out of room in the key/value arrays.
