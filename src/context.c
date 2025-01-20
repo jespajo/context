@@ -493,6 +493,8 @@ void free_context(Memory_context *context)
         if (c->free_blocks)  dealloc(c->free_blocks, c->parent);
         if (c->used_blocks)  dealloc(c->used_blocks, c->parent);
 
+        pthread_mutex_unlock(&c->mutex);
+
         dealloc(c, c->parent);
     } else {
         for (s64 i = 0; i < c->buffer_count; i++)  free(c->buffers[i].data);
@@ -501,10 +503,10 @@ void free_context(Memory_context *context)
         if (c->free_blocks)  free(c->free_blocks);
         if (c->used_blocks)  free(c->used_blocks);
 
+        pthread_mutex_unlock(&c->mutex);
+
         free(c);
     }
-
-    pthread_mutex_unlock(&c->mutex);
 }
 
 void reset_context(Memory_context *context)
