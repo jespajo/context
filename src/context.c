@@ -344,6 +344,8 @@ void *alloc(s64 count, u64 unit_size, Memory_context *context)
 
     void *data = NULL;
 
+    pthread_mutex_lock(&c->mutex);
+
     // See if there's an already-free block of the right size.
     for (s64 i = get_free_block_index(c, size, NULL); i < c->free_count; i++) {
         Memory_block *free_block = &c->free_blocks[i];
@@ -361,6 +363,8 @@ void *alloc(s64 count, u64 unit_size, Memory_context *context)
 
         data = alloc_block(c, free_block, size, alignment)->data;
     }
+
+    pthread_mutex_unlock(&c->mutex);
 
     return data;
 }
@@ -385,6 +389,8 @@ void *resize(void *data, s64 new_limit, u64 unit_size, Memory_context *context)
 
     u64 new_size = new_limit * unit_size;
 
+    pthread_mutex_lock(&c->mutex);
+
     Memory_block *used_block = find_used_block(c, data);
     assert(used_block);
 
@@ -392,6 +398,7 @@ void *resize(void *data, s64 new_limit, u64 unit_size, Memory_context *context)
     if (resized) {
         // We managed to resize in place.
         assert(resized->data == data);
+        pthread_mutex_unlock(&c->mutex);
         return data;
     }
 
@@ -438,6 +445,8 @@ void *resize(void *data, s64 new_limit, u64 unit_size, Memory_context *context)
 
     dealloc_block(context, used_block);
 
+    pthread_mutex_unlock(&c->mutex);
+
     return new_data;
 }
 
@@ -446,10 +455,14 @@ void dealloc(void *data, Memory_context *context)
     assert(data);
     assert(context);
 
+    pthread_mutex_lock(&context->mutex);
+
     Memory_block *used_block = find_used_block(context, data);
     assert(used_block);
 
     dealloc_block(context, used_block);
+
+    pthread_mutex_unlock(&context->mutex);
 }
 
 Memory_context *new_context(Memory_context *parent)
@@ -461,6 +474,8 @@ Memory_context *new_context(Memory_context *parent)
 
     context->parent = parent;
 
+    pthread_mutex_init(&context->mutex, NULL);
+
     return context;
 }
 
@@ -468,6 +483,8 @@ void free_context(Memory_context *context)
 // This function automatically frees all child contexts because they all allocated from this parent.
 {
     Memory_context *c = context;
+
+    pthread_mutex_lock(&c->mutex);
 
     if (c->parent) {
         for (s64 i = 0; i < c->buffer_count; i++)  dealloc(c->buffers[i].data, c->parent);
@@ -486,11 +503,15 @@ void free_context(Memory_context *context)
 
         free(c);
     }
+
+    pthread_mutex_unlock(&c->mutex);
 }
 
 void reset_context(Memory_context *context)
 {
     Memory_context *c = context;
+
+    pthread_mutex_lock(&c->mutex);
 
     c->free_count = 0;
     c->used_count = 0;
@@ -505,6 +526,8 @@ void reset_context(Memory_context *context)
 
         add_free_block(c, data, size);
     }
+
+    pthread_mutex_unlock(&c->mutex);
 }
 
 //
@@ -540,6 +563,8 @@ static bool are_in_used_order(Memory_block *blocks, s64 count)
 void check_context_integrity(Memory_context *context)
 {
     Memory_context *c = context;
+
+    pthread_mutex_lock(&c->mutex);
 
     assert(are_in_free_order(c->free_blocks, c->free_count));
     assert(are_in_used_order(c->used_blocks, c->used_count));
@@ -600,5 +625,7 @@ void check_context_integrity(Memory_context *context)
 
     assert(num_free == c->free_count);
     assert(num_used == c->used_count);
+
+    pthread_mutex_unlock(&c->mutex);
 }
 #endif // NDEBUG
