@@ -56,6 +56,7 @@ struct Hash_bucket {
 
 typedef struct Hash_bucket Hash_bucket;
 typedef Dict(char *)       string_dict;
+typedef Dict(int)          int_dict;
 
 u64 hash_bytes(void *p, u64 size);
 u64 hash_string(char *string);

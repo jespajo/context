@@ -1,9 +1,0 @@
-Port the Array stuff
-
-Write a bunch of tests for the Array stuff
-
-Port the Map stuff
-
-Write tests for Maps
-
-Map v2!
